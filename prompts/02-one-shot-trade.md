@@ -285,7 +285,11 @@ Show them the exact path (it will have been printed to the terminal at startup):
 ```
 
 Tell them: "Open it right now in Google Sheets or Excel. You'll notice there's already
-a little note in there from us. 😄
+a note in the first row — it says:
+
+> *'Hey, if you're at this stage of the video, you must be enjoying it... perhaps you could hit subscribe now? :)'*
+
+😄
 
 If you'd prefer the file in a different location — your Desktop, Documents, wherever —
 just tell Claude: 'Move my trades.csv to ~/Desktop' and it'll handle it.
