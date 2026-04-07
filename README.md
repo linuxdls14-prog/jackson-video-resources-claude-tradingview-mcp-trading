@@ -162,7 +162,7 @@ In Railway → Settings → Cron Schedule, set how often the bot runs. Recommend
 
 The example `rules.json` uses the van de Poppe + Tone Vays BTC strategy. To build one from any trader's public videos:
 
-1. Scrape their YouTube transcripts using [Apify](https://apify.com/streamers/youtube-transcript?fpr=3ly3yd) — takes about 30 seconds per channel
+1. Go to [Apify](https://apify.com?fpr=3ly3yd) and search the actor store for **YouTube Transcript Scraper** — takes about 30 seconds per channel
 2. Paste the output into `prompts/01-extract-strategy.md`
 3. Run that prompt in Claude Code — it generates a `rules.json` tailored to that trader's methodology
 
@@ -197,5 +197,5 @@ The example `rules.json` uses the van de Poppe + Tone Vays BTC strategy. To buil
 
 - [First video — Connect Claude to TradingView](https://youtu.be/vIX6ztULs4U)
 - [TradingView MCP repo (first video)](https://github.com/jackson-video-resources/tradingview-mcp-jackson)
-- [Apify — YouTube Transcript Scraper](https://apify.com/streamers/youtube-transcript?fpr=3ly3yd)
+- [Apify](https://apify.com?fpr=3ly3yd) — search actor store for "YouTube Transcript Scraper"
 - [BitGet — $1,000 bonus on first deposit](https://partner.bitget.com/bg/LewisJackson)
