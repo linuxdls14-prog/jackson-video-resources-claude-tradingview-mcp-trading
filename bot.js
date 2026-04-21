@@ -13,8 +13,8 @@ const PAPER_TRADING       = process.env.PAPER_TRADING !== "false";
 const LEVERAGE            = 3;
 
 // ─── Strategy thresholds ──────────────────────────────────────────────────────
-const BTC_PUMP_15M    =  0.8;   // BTC must rise at least 0.8% in 15m
-const BTC_PUMP_1H     =  1.5;   // BTC must rise at least 1.5% in 1h
+const BTC_PUMP_15M    =  0.4;   // BTC must rise at least 0.4% in 15m
+const BTC_PUMP_1H     =  0.8;   // BTC must rise at least 0.8% in 1h
 const SOL_LAG_RATIO   =  0.5;   // SOL must have moved less than 50% of BTC
 const SOL_RSI_MAX     = 75;     // Don't enter if SOL already overbought
 const BTC_CRASH_15M   = -3.0;   // Emergency exit only on REAL crash: BTC drops 3% in 15m
