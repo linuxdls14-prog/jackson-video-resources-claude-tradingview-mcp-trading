@@ -201,7 +201,7 @@ async function main() {
 
   console.log("\n══════════════════════════════════════════════════════");
   console.log(`  SOL/BTC Dual Mode — ${date} ${time} UTC`);
-  console.log(`  Mode: ${PAPER_TRADING ? "📄 PAPER" : "🔴 LIVE"} | ${LEVERAGE}x | $${PORTFOLIO_VALUE_USD} ($${HALF_CAPITAL}/slot)`);
+  console.log(`  Mode: ${PAPER_TRADING ? "📄 PAPER" : "🔴 LIVE"} | ${LEVERAGE}x | $${PORTFOLIO_VALUE_USD} ($${THIRD_CAPITAL.toFixed(0)}/slot)`);
   console.log("══════════════════════════════════════════════════════\n");
 
   console.log("📡 Fetching Binance data...");
