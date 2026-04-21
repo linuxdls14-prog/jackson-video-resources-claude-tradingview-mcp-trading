@@ -1,67 +1,76 @@
 {
-  "watchlist": ["BTCUSDT"],
-  "default_timeframe": "4h",
+  "watchlist": ["SOLUSDT", "BTCUSDT"],
+  "default_timeframe": "5m",
 
   "strategy": {
-    "name": "EMA 50/200 + RSI(14) + MACD Swing Strategy",
-    "sources": ["Proven 4H BTC swing methodology"],
-    "description": "Three indicators each doing a different job. EMA 50/200 for macro trend, RSI(14) for momentum and avoiding overbought/oversold extremes, MACD for entry confirmation. All three must align before a trade fires. Designed for 4H candles on BTC futures."
+    "name": "SOL/BTC Lag Correlation Strategy",
+    "sources": ["Custom — based on observed BTC/SOL correlation with lag"],
+    "description": "BTC moves first, SOL follows with a multiplier effect and a delay. When BTC pumps but SOL hasn't caught up yet, that gap is the trade. Enter long SOL when BTC has moved significantly but SOL is lagging behind its expected ratio. Exit when SOL catches up or cut immediately if BTC crashes."
   },
 
   "indicators": {
-    "ema_50": "Medium-term trend. Price above EMA(50) = bullish structure. Below = bearish.",
-    "ema_200": "Macro trend. Price above EMA(200) = bull market. Below = bear market. Most important filter.",
-    "rsi_14": "Momentum. Above 50 = bullish momentum. Below 50 = bearish. Avoid longs above 70 (overbought). Avoid shorts below 30 (oversold).",
-    "macd": "Entry timing. MACD line crossing above signal line = bullish confirmation. Crossing below = bearish confirmation. Histogram growing = momentum building."
+    "btc_change_15m": "BTC % change over the last 15 minutes. The trigger signal.",
+    "btc_change_1h": "BTC % change over the last 1 hour. Confirms sustained move, not a wick.",
+    "sol_change_15m": "SOL % change over the last 15 minutes. Used to measure the lag.",
+    "sol_change_1h": "SOL % change over the last 1 hour. Used to confirm SOL is underperforming.",
+    "btc_volume": "BTC volume spike confirms the move is real, not a fake pump.",
+    "sol_rsi_5m": "RSI(14) on 5m SOL chart. Avoid entering if already overbought above 75."
   },
 
   "bias_criteria": {
     "bullish": [
-      "Price is above EMA(50)",
-      "Price is above EMA(200)",
-      "RSI(14) is above 50"
+      "BTC has gained more than 0.8% in the last 15 minutes",
+      "BTC has gained more than 1.5% in the last 1 hour",
+      "SOL has gained less than 50% of what BTC has gained — lag confirmed",
+      "BTC move is supported by above-average volume — move is real"
     ],
-    "bearish": [
-      "Price is below EMA(50)",
-      "Price is below EMA(200)",
-      "RSI(14) is below 50"
+    "bearish_crash": [
+      "BTC has dropped more than 1.5% in the last 15 minutes",
+      "BTC has dropped more than 3% in the last 1 hour"
     ]
   },
 
   "entry_rules": {
     "long": [
-      "Price is above EMA(200) — macro trend is bullish",
-      "Price is above EMA(50) — medium-term structure is bullish",
-      "RSI(14) is between 50 and 70 — bullish momentum without being overbought",
-      "MACD line has crossed above the signal line — bullish confirmation",
-      "MACD histogram is positive and growing — momentum is building"
-    ],
-    "short": [
-      "Price is below EMA(200) — macro trend is bearish",
-      "Price is below EMA(50) — medium-term structure is bearish",
-      "RSI(14) is between 30 and 50 — bearish momentum without being oversold",
-      "MACD line has crossed below the signal line — bearish confirmation",
-      "MACD histogram is negative and growing — downside momentum is building"
+      "BTC 15m change is above +0.8% — BTC is moving up",
+      "BTC 1h change is above +1.5% — sustained move, not just a wick",
+      "SOL 15m change is less than half of BTC 15m change — SOL is lagging",
+      "SOL 1h change is less than BTC 1h change — lag confirmed on higher timeframe too",
+      "BTC volume in last 15m is above the 20-period average — move is real",
+      "SOL RSI(14) on 5m is below 75 — not already overbought",
+      "No active open position already running"
     ]
   },
 
   "exit_rules": [
-    "Take profit when RSI(14) reaches 70 (longs) or 30 (shorts) — momentum exhaustion",
-    "Exit long if price closes below EMA(50) on 4H candle",
-    "Exit short if price closes above EMA(50) on 4H candle",
-    "Hard stop loss: 2% below entry for longs, 2% above entry for shorts",
-    "Trailing stop: move stop to breakeven once trade is 1.5% in profit"
+    "PRIORITY EXIT — BTC drops more than 1.5% in any 15m candle while in trade: close immediately, SOL will drop harder",
+    "PRIORITY EXIT — BTC drops more than 3% in 1 hour while in trade: close immediately",
+    "Take profit when SOL has gained 2x what BTC gained from entry point — lag has closed",
+    "Take profit when SOL RSI(14) on 5m crosses above 80 — overbought, momentum exhausting",
+    "Time stop: if trade has been open more than 4 hours and not in profit, close it — lag trade failed",
+    "Hard stop loss: 2% below entry price — maximum loss per trade"
   ],
 
   "risk_rules": [
-    "Risk maximum 1% of portfolio per trade",
-    "Maximum trade size capped by MAX_TRADE_SIZE_USD in .env",
-    "Maximum trades per day capped by MAX_TRADES_PER_DAY in .env",
-    "Do not enter a trade if MACD crossover happened more than 2 candles ago — entry is late",
-    "Do not trade if RSI(14) is above 70 (longs) or below 30 (shorts) — avoid chasing extremes",
-    "Do not open a new position if one is already open",
-    "Paper trade first — validate this strategy before going live"
+    "Capital: 100 USDT with 3x leverage = 300 USDT position size maximum",
+    "Risk maximum 2% of capital per trade = $2 max loss before stop triggers",
+    "Maximum 3 trades per day — do not overtrade if first trades fail",
+    "Do not enter if BTC has already been rising for more than 2 hours — lag opportunity is gone",
+    "Do not enter if SOL has already moved more than BTC — you missed the trade",
+    "Do not enter during first 15 minutes after a BTC crash recovery — too volatile",
+    "If 2 consecutive stop losses hit in one day, stop trading for the rest of that day",
+    "Paper trade first — validate correlation holds before going live"
   ],
 
-  "notes": "Swing strategy designed for 4H BTC futures. Cron should run every 4 hours aligned with candle close: 0 */4 * * *. EMA(200) is the most important filter — never go long in a bear market or short in a bull market. MACD crossover is the trigger, EMAs and RSI are the filter."
+  "crash_protection": {
+    "description": "BTC crash = SOL crashes harder and faster. This is the biggest risk.",
+    "rules": [
+      "If BTC drops 1.5% or more in a single 15m candle: EXIT IMMEDIATELY, no questions",
+      "If BTC drops 3% or more in 1 hour: EXIT IMMEDIATELY",
+      "If BTC drops below its last 1h low while in trade: EXIT",
+      "Never hold a SOL long through a BTC red candle of more than 1%"
+    ]
+  },
+
+  "notes": "This strategy is based on the observed lag between BTC and SOL moves. BTC moves approximately 1x, SOL moves 2-3x with a delay. The edge is entering SOL during that delay window. The biggest risk is BTC reversing — SOL will fall harder and faster than BTC. Crash protection rules are mandatory. Cron should run every 5 minutes: */5 * * * *. Leverage: 3x maximum. Capital: start with 100 USDT, scale to 500 USDT only after 2+ weeks of profitable paper trading."
 }
