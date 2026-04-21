@@ -10,7 +10,7 @@ const PORTFOLIO_VALUE_USD = parseFloat(process.env.PORTFOLIO_VALUE_USD || "100")
 const MAX_TRADE_SIZE_USD  = parseFloat(process.env.MAX_TRADE_SIZE_USD || "100");
 const MAX_TRADES_PER_DAY  = parseInt(process.env.MAX_TRADES_PER_DAY || "3");
 const PAPER_TRADING       = process.env.PAPER_TRADING !== "false";
-const LEVERAGE            = 3;
+const LEVERAGE            = 5;
 
 // ─── Strategy thresholds ──────────────────────────────────────────────────────
 const BTC_PUMP_15M    =  0.4;   // BTC must rise at least 0.4% in 15m
@@ -188,12 +188,6 @@ async function main() {
   const solChange15m = pctChange(sol5m[sol5m.length - 4].close,  solPrice);  // ~15m via 5m candles
   const solChange1h  = pctChange(sol1h[sol1h.length - 2].open,   solPrice);
 
-  // Volume — is BTC volume above its 20-period average?
-  const btcVolumes = btc15m.slice(0, -1).map((c) => c.volume);
-  const avgBtcVol  = btcVolumes.reduce((a, b) => a + b, 0) / btcVolumes.length;
-  const lastBtcVol = btc15m[btc15m.length - 1].volume;
-  const volumeOk   = lastBtcVol > avgBtcVol;
-
   // RSI(14) on SOL 5m
   const solCloses = sol5m.map((c) => c.close);
   const solRSI    = calcRSI(solCloses, 14);
@@ -202,7 +196,6 @@ async function main() {
   console.log(`  BTC:  $${btcPrice.toFixed(2)}  | 15m: ${btcChange15m.toFixed(2)}%  | 1h: ${btcChange1h.toFixed(2)}%`);
   console.log(`  SOL:  $${solPrice.toFixed(4)} | 15m: ${solChange15m.toFixed(2)}%  | 1h: ${solChange1h.toFixed(2)}%`);
   console.log(`  SOL RSI(14) 5m: ${solRSI ? solRSI.toFixed(1) : "N/A"}`);
-  console.log(`  BTC Vol vs Avg: ${lastBtcVol.toFixed(0)} vs ${avgBtcVol.toFixed(0)} → ${volumeOk ? "✅ Above avg" : "⚠️ Below avg"}`);
 
   // ── Check open position ────────────────────────────────────────────────────
   const position = loadState();
@@ -272,12 +265,6 @@ async function main() {
       required: "SOL 1h < BTC 1h",
       actual:   `SOL: ${solChange1h.toFixed(2)}% vs BTC: ${btcChange1h.toFixed(2)}%`,
       pass:     solChange1h < btcChange1h,
-    },
-    {
-      label:    "BTC volume above 20-period avg (move is real)",
-      required: "above avg",
-      actual:   volumeOk ? "above avg" : "below avg",
-      pass:     volumeOk,
     },
     {
       label:    `SOL RSI(14) below ${SOL_RSI_MAX} (not overbought)`,
