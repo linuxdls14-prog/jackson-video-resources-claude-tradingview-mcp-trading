@@ -1,50 +1,67 @@
 {
   "watchlist": ["BTCUSDT"],
-  "default_timeframe": "1m",
+  "default_timeframe": "4h",
 
   "strategy": {
-    "name": "VWAP + RSI(3) + EMA(8) Scalping Strategy",
-    "sources": ["Lewis Jackson"],
-    "description": "Three indicators, each doing a different job. EMA(8) for trend direction, VWAP for session bias, RSI(3) for entry timing. All three must align before a trade fires."
+    "name": "EMA 50/200 + RSI(14) + MACD Swing Strategy",
+    "sources": ["Proven 4H BTC swing methodology"],
+    "description": "Three indicators each doing a different job. EMA 50/200 for macro trend, RSI(14) for momentum and avoiding overbought/oversold extremes, MACD for entry confirmation. All three must align before a trade fires. Designed for 4H candles on BTC futures."
   },
 
   "indicators": {
-    "ema_8": "Trend direction. Price above EMA(8) = bullish momentum. Below = bearish.",
-    "vwap": "Session bias. Price above VWAP = buyers in control. Below = sellers. Resets at midnight UTC.",
-    "rsi_3": "Entry timing. RSI on 3 candles only — extremely sensitive. Below 30 in an uptrend = snap-back setup. Above 70 in a downtrend = reversal likely."
+    "ema_50": "Medium-term trend. Price above EMA(50) = bullish structure. Below = bearish.",
+    "ema_200": "Macro trend. Price above EMA(200) = bull market. Below = bear market. Most important filter.",
+    "rsi_14": "Momentum. Above 50 = bullish momentum. Below 50 = bearish. Avoid longs above 70 (overbought). Avoid shorts below 30 (oversold).",
+    "macd": "Entry timing. MACD line crossing above signal line = bullish confirmation. Crossing below = bearish confirmation. Histogram growing = momentum building."
   },
 
   "bias_criteria": {
-    "bullish": ["Price is above VWAP", "Price is above EMA(8)"],
-    "bearish": ["Price is below VWAP", "Price is below EMA(8)"]
+    "bullish": [
+      "Price is above EMA(50)",
+      "Price is above EMA(200)",
+      "RSI(14) is above 50"
+    ],
+    "bearish": [
+      "Price is below EMA(50)",
+      "Price is below EMA(200)",
+      "RSI(14) is below 50"
+    ]
   },
 
   "entry_rules": {
     "long": [
-      "Price is above VWAP — buyers in control for the session",
-      "Price is above EMA(8) — uptrend confirmed",
-      "RSI(3) has dropped below 30 — short-term pullback in an uptrend, snap-back likely"
+      "Price is above EMA(200) — macro trend is bullish",
+      "Price is above EMA(50) — medium-term structure is bullish",
+      "RSI(14) is between 50 and 70 — bullish momentum without being overbought",
+      "MACD line has crossed above the signal line — bullish confirmation",
+      "MACD histogram is positive and growing — momentum is building"
     ],
     "short": [
-      "Price is below VWAP — sellers in control",
-      "Price is below EMA(8) — downtrend confirmed",
-      "RSI(3) has spiked above 70 — overbought in a downtrend, reversal likely"
+      "Price is below EMA(200) — macro trend is bearish",
+      "Price is below EMA(50) — medium-term structure is bearish",
+      "RSI(14) is between 30 and 50 — bearish momentum without being oversold",
+      "MACD line has crossed below the signal line — bearish confirmation",
+      "MACD histogram is negative and growing — downside momentum is building"
     ]
   },
 
   "exit_rules": [
-    "Exit when RSI(3) crosses back above 50 (for longs) or below 50 (for shorts)",
-    "Hard stop: 0.3% below entry for longs, 0.3% above entry for shorts",
-    "Take profit at next VWAP touch or EMA(8) cross"
+    "Take profit when RSI(14) reaches 70 (longs) or 30 (shorts) — momentum exhaustion",
+    "Exit long if price closes below EMA(50) on 4H candle",
+    "Exit short if price closes above EMA(50) on 4H candle",
+    "Hard stop loss: 2% below entry for longs, 2% above entry for shorts",
+    "Trailing stop: move stop to breakeven once trade is 1.5% in profit"
   ],
 
   "risk_rules": [
     "Risk maximum 1% of portfolio per trade",
     "Maximum trade size capped by MAX_TRADE_SIZE_USD in .env",
     "Maximum trades per day capped by MAX_TRADES_PER_DAY in .env",
-    "Do not trade if price is more than 1.5% away from VWAP — overextended",
-    "Paper trade first — validate this strategy on your specific asset before going live"
+    "Do not enter a trade if MACD crossover happened more than 2 candles ago — entry is late",
+    "Do not trade if RSI(14) is above 70 (longs) or below 30 (shorts) — avoid chasing extremes",
+    "Do not open a new position if one is already open",
+    "Paper trade first — validate this strategy before going live"
   ],
 
-  "notes": "Scalping strategy — designed for 1m to 5m timeframes. RSI(3) is intentionally fast and sensitive. Do not apply to higher timeframes."
+  "notes": "Swing strategy designed for 4H BTC futures. Cron should run every 4 hours aligned with candle close: 0 */4 * * *. EMA(200) is the most important filter — never go long in a bear market or short in a bull market. MACD crossover is the trigger, EMAs and RSI are the filter."
 }
