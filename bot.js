@@ -17,10 +17,10 @@ const BTC_PUMP_15M    =  0.8;   // BTC must rise at least 0.8% in 15m
 const BTC_PUMP_1H     =  1.5;   // BTC must rise at least 1.5% in 1h
 const SOL_LAG_RATIO   =  0.5;   // SOL must have moved less than 50% of BTC
 const SOL_RSI_MAX     = 75;     // Don't enter if SOL already overbought
-const BTC_CRASH_15M   = -1.5;   // Emergency exit if BTC drops 1.5% in 15m
-const BTC_CRASH_1H    = -3.0;   // Emergency exit if BTC drops 3% in 1h
-const STOP_LOSS_PCT   =  2.0;   // 2% hard stop loss
-const MAX_TRADE_HOURS =  4;     // Time stop — exit after 4h if not in profit
+const BTC_CRASH_15M   = -3.0;   // Emergency exit only on REAL crash: BTC drops 3% in 15m
+const BTC_CRASH_1H    = -6.0;   // Emergency exit only on REAL crash: BTC drops 6% in 1h
+const TAKE_PROFIT_PCT =  2.0;   // Take profit when SOL gains 2%
+// NO stop loss — we hold through normal pullbacks
 
 // ─── State files ──────────────────────────────────────────────────────────────
 const LOG_FILE    = "safety-check-log.json";
@@ -217,18 +217,13 @@ async function main() {
 
     let exitReason = null;
 
+    // ONLY exit on: real BTC crash OR take profit — NO stop loss
     if (btcChange15m <= BTC_CRASH_15M)
-      exitReason = `🚨 BTC crashed ${btcChange15m.toFixed(2)}% in 15m — emergency exit`;
+      exitReason = `🚨 REAL CRASH — BTC dropped ${btcChange15m.toFixed(2)}% in 15m — emergency exit`;
     else if (btcChange1h <= BTC_CRASH_1H)
-      exitReason = `🚨 BTC crashed ${btcChange1h.toFixed(2)}% in 1h — emergency exit`;
-    else if (pnlPct <= -STOP_LOSS_PCT)
-      exitReason = `🛑 Stop loss hit: ${pnlPct.toFixed(2)}%`;
-    else if (pnlPct >= btcChange1h * 2)
-      exitReason = `✅ Take profit: SOL caught up (${pnlPct.toFixed(2)}%)`;
-    else if (solRSI && solRSI > 80)
-      exitReason = `✅ RSI overbought ${solRSI.toFixed(1)} — momentum exhausted`;
-    else if (hoursOpen >= MAX_TRADE_HOURS && pnlPct < 0)
-      exitReason = `⏱️ Time stop: ${hoursOpen.toFixed(1)}h open, not in profit`;
+      exitReason = `🚨 REAL CRASH — BTC dropped ${btcChange1h.toFixed(2)}% in 1h — emergency exit`;
+    else if (pnlPct >= TAKE_PROFIT_PCT)
+      exitReason = `✅ Take profit hit: SOL +${pnlPct.toFixed(2)}% — exiting`;
 
     if (exitReason) {
       console.log(`\n  EXIT: ${exitReason}`);
@@ -291,7 +286,7 @@ async function main() {
       pass:     solRSI !== null && solRSI < SOL_RSI_MAX,
     },
     {
-      label:    "BTC not crashing (crash protection)",
+      label:    "BTC not in real crash (protection — pullbacks OK)",
       required: `15m > ${BTC_CRASH_15M}% and 1h > ${BTC_CRASH_1H}%`,
       actual:   `15m: ${btcChange15m.toFixed(2)}% | 1h: ${btcChange1h.toFixed(2)}%`,
       pass:     btcChange15m > BTC_CRASH_15M && btcChange1h > BTC_CRASH_1H,
