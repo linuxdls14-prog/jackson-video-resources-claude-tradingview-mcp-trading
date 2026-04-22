@@ -1,3 +1,4 @@
+
 import fs from "fs";
 import https from "https";
 
@@ -22,8 +23,12 @@ const CRASH_BTC_1H          = -6.0;  // BTC drops 6% in 1h = extreme crash, exit
 
 // Momentum mode: SOL lagging BTC (BTC as additional advantage, not requirement)
 const MOMENTUM_LAG_RATIO    =  0.6;  // SOL moved less than 60% of BTC — lag confirmed
-const MOMENTUM_SOL_RSI_MAX  = 72;    // SOL not overbought
+const MOMENTUM_SOL_RSI_MAX  = 74;    // Momentum strong without chasing the ceiling
 const MOMENTUM_TP           =  0.8;  // TP +0.8% — realistic 5m scalp
+
+// Trailing stop — locks in profit once trade moves in our favor
+const TRAIL_START           =  0.6;  // % — start trailing when PnL hits +0.6%
+const TRAIL_LOCK            =  0.25; // % — lock in at least this much profit
 
 // Pullback mode: SOL dropped harder than BTC = oversold bounce
 const PULLBACK_BTC_MIN_1H   = -0.1;  // BTC pulled back at least 0.1% in 1h (much more realistic)
@@ -184,12 +189,21 @@ async function handlePosition(pos, stateFile, tag, tp, solPrice, btcChange15m, b
   console.log(`  PnL: ${pnlPct.toFixed(2)}% (${(pnlPct * LEVERAGE).toFixed(2)}% levered) | Open: ${minutesOpen.toFixed(0)}min | TP: +${tp}% | Max: ${MAX_HOLD_MINUTES}min`);
 
   let exitReason = null;
+
+  // Trailing stop — once PnL hits TRAIL_START, protect TRAIL_LOCK minimum
+  const trailingStop = pnlPct >= TRAIL_START ? pnlPct - TRAIL_LOCK : null;
+  if (trailingStop !== null) {
+    console.log(`  🔒 Trailing active — locked: +${trailingStop.toFixed(2)}% | current: +${pnlPct.toFixed(2)}%`);
+  }
+
   if (btcChange15m <= CRASH_BTC_15M)
     exitReason = `🚨 CRASH — BTC ${btcChange15m.toFixed(2)}% in 15m`;
   else if (btcChange1h <= CRASH_BTC_1H)
     exitReason = `🚨 CRASH — BTC ${btcChange1h.toFixed(2)}% in 1h`;
   else if (pnlPct >= tp)
     exitReason = `✅ Take profit +${pnlPct.toFixed(2)}%`;
+  else if (trailingStop !== null && pnlPct <= trailingStop)
+    exitReason = `🔒 Trailing stop — locked +${trailingStop.toFixed(2)}%, now at +${pnlPct.toFixed(2)}%`;
   else if (minutesOpen >= MAX_HOLD_MINUTES)
     exitReason = `⏰ Max hold ${MAX_HOLD_MINUTES}min reached (PnL: ${pnlPct.toFixed(2)}%) — freeing capital`;
 
