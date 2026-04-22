@@ -118,12 +118,131 @@ async function getCandles(symbol, interval, limit) {
   }));
 }
 
-function loadPos(file) {
-  if (!fs.existsSync(file)) return null;
-  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+// ─── GitHub state persistence ─────────────────────────────────────────────────
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GITHUB_REPO  = process.env.GITHUB_REPO;
+
+async function githubGet(path) {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: "api.github.com",
+      path: `/repos/${GITHUB_REPO}/contents/${path}`,
+      method: "GET",
+      headers: {
+        "Authorization": `token ${GITHUB_TOKEN}`,
+        "User-Agent": "sol-btc-bot",
+        "Accept": "application/vnd.github.v3+json",
+      },
+    };
+    https.get(options, (res) => {
+      let d = "";
+      res.on("data", (c) => (d += c));
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(d);
+          if (parsed.content) {
+            const content = Buffer.from(parsed.content, "base64").toString("utf8");
+            resolve({ content, sha: parsed.sha });
+          } else {
+            resolve(null);
+          }
+        } catch { resolve(null); }
+      });
+    }).on("error", () => resolve(null));
+  });
 }
-function savePos(file, data) { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
-function clearPos(file) { if (fs.existsSync(file)) fs.unlinkSync(file); }
+
+async function githubPut(path, content, sha) {
+  const encoded = Buffer.from(content).toString("base64");
+  const body = JSON.stringify({
+    message: `state: ${path} ${new Date().toISOString().slice(0, 16)}`,
+    content: encoded,
+    ...(sha ? { sha } : {}),
+  });
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: "api.github.com",
+      path: `/repos/${GITHUB_REPO}/contents/${path}`,
+      method: "PUT",
+      headers: {
+        "Authorization": `token ${GITHUB_TOKEN}`,
+        "User-Agent": "sol-btc-bot",
+        "Accept": "application/vnd.github.v3+json",
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let d = "";
+      res.on("data", (c) => (d += c));
+      res.on("end", () => {
+        try { resolve(JSON.parse(d)); } catch { resolve(null); }
+      });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+async function githubDelete(path) {
+  const current = await githubGet(path);
+  if (!current) return;
+  const body = JSON.stringify({
+    message: `clear: ${path}`,
+    sha: current.sha,
+  });
+  return new Promise((resolve) => {
+    const options = {
+      hostname: "api.github.com",
+      path: `/repos/${GITHUB_REPO}/contents/${path}`,
+      method: "DELETE",
+      headers: {
+        "Authorization": `token ${GITHUB_TOKEN}`,
+        "User-Agent": "sol-btc-bot",
+        "Accept": "application/vnd.github.v3+json",
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let d = "";
+      res.on("data", (c) => (d += c));
+      res.on("end", () => resolve());
+    });
+    req.on("error", () => resolve());
+    req.write(body);
+    req.end();
+  });
+}
+
+async function loadPos(file) {
+  if (!GITHUB_TOKEN || !GITHUB_REPO) {
+    if (!fs.existsSync(file)) return null;
+    try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+  }
+  const result = await githubGet(`state/${file}`);
+  if (!result) return null;
+  try { return JSON.parse(result.content); } catch { return null; }
+}
+
+async function savePos(file, data) {
+  const content = JSON.stringify(data, null, 2);
+  if (!GITHUB_TOKEN || !GITHUB_REPO) {
+    fs.writeFileSync(file, content);
+    return;
+  }
+  const current = await githubGet(`state/${file}`);
+  await githubPut(`state/${file}`, content, current?.sha);
+}
+
+async function clearPos(file) {
+  if (!GITHUB_TOKEN || !GITHUB_REPO) {
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+    return;
+  }
+  await githubDelete(`state/${file}`);
+}
 
 function todayTradeCount() {
   if (!fs.existsSync(TRADES_FILE)) return 0;
@@ -144,75 +263,15 @@ function logTrade({ date, time, side, quantity, price, mode, tag, orderId = "PAP
   syncTradesToGitHub().catch((e) => console.error("  ⚠️ GitHub sync failed:", e.message));
 }
 
-// ─── GitHub API sync ──────────────────────────────────────────────────────────
+// ─── Sync trades CSV to GitHub ────────────────────────────────────────────────
 async function syncTradesToGitHub() {
-  const token = process.env.GITHUB_TOKEN;
-  const repo  = process.env.GITHUB_REPO;
-  if (!token || !repo) return;
-
+  if (!GITHUB_TOKEN || !GITHUB_REPO) return;
   const content = fs.existsSync(TRADES_FILE)
     ? fs.readFileSync(TRADES_FILE, "utf8")
     : "Date,Time,Exchange,Symbol,Side,Quantity,Price,TotalUSD,Fee,NetAmount,OrderID,Mode,Tag\n";
-
-  const encoded = Buffer.from(content).toString("base64");
-
-  // First get the current SHA of the file (needed for update)
-  const getSha = () => new Promise((resolve) => {
-    const options = {
-      hostname: "api.github.com",
-      path: `/repos/${repo}/contents/trades.csv`,
-      method: "GET",
-      headers: {
-        "Authorization": `token ${token}`,
-        "User-Agent": "sol-btc-bot",
-        "Accept": "application/vnd.github.v3+json",
-      },
-    };
-    https.get(options, (res) => {
-      let d = "";
-      res.on("data", (c) => (d += c));
-      res.on("end", () => {
-        try { resolve(JSON.parse(d).sha || null); } catch { resolve(null); }
-      });
-    }).on("error", () => resolve(null));
-  });
-
-  const sha  = await getSha();
-  const body = JSON.stringify({
-    message: `trade log ${new Date().toISOString().slice(0, 16)}`,
-    content: encoded,
-    ...(sha ? { sha } : {}),
-  });
-
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: "api.github.com",
-      path: `/repos/${repo}/contents/trades.csv`,
-      method: "PUT",
-      headers: {
-        "Authorization": `token ${token}`,
-        "User-Agent": "sol-btc-bot",
-        "Accept": "application/vnd.github.v3+json",
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body),
-      },
-    };
-    const req = https.request(options, (res) => {
-      let d = "";
-      res.on("data", (c) => (d += c));
-      res.on("end", () => {
-        if (res.statusCode === 200 || res.statusCode === 201) {
-          console.log("  ✅ trades.csv synced to GitHub");
-          resolve();
-        } else {
-          reject(new Error(`GitHub API ${res.statusCode}`));
-        }
-      });
-    });
-    req.on("error", reject);
-    req.write(body);
-    req.end();
-  });
+  const current = await githubGet("trades.csv");
+  await githubPut("trades.csv", content, current?.sha);
+  console.log("  ✅ trades.csv synced to GitHub");
 }
 
 function saveLog(data) {
@@ -353,20 +412,25 @@ async function main() {
   console.log(`  SOL vs BTC diff 1h: ${solBtcDiff1h.toFixed(2)}% | SOL RSI: ${solRSI ? solRSI.toFixed(1) : "N/A"}`);
 
   // ── Handle existing positions ──────────────────────────────────────────────
-  const posMomentum     = loadPos(STATE_MOMENTUM);
-  const posPullback     = loadPos(STATE_PULLBACK);
-  const posContinuation = loadPos(STATE_CONTINUATION);
-  const posTrend        = loadPos(STATE_TREND);
+  console.log("📂 Loading position state from GitHub...");
+  const [posMomentum, posPullback, posContinuation, posTrend] = await Promise.all([
+    loadPos(STATE_MOMENTUM),
+    loadPos(STATE_PULLBACK),
+    loadPos(STATE_CONTINUATION),
+    loadPos(STATE_TREND),
+  ]);
   if (posMomentum)     await handlePosition(posMomentum,     STATE_MOMENTUM,     "MOMENTUM",     MOMENTUM_TP,  MOMENTUM_MAX_MINUTES,     solPrice, btcChange15m, btcChange1h, now);
   if (posPullback)     await handlePosition(posPullback,     STATE_PULLBACK,     "PULLBACK",     PULLBACK_TP,  PULLBACK_MAX_MINUTES,     solPrice, btcChange15m, btcChange1h, now);
   if (posContinuation) await handlePosition(posContinuation, STATE_CONTINUATION, "CONTINUATION", BREAKOUT_TP,  CONTINUATION_MAX_MINUTES, solPrice, btcChange15m, btcChange1h, now);
   if (posTrend)        await handlePosition(posTrend,        STATE_TREND,        "TREND",        TREND_TP,     TREND_MAX_MINUTES,        solPrice, btcChange15m, btcChange1h, now);
 
   // Reload state after potential exits
-  const hasM = !!loadPos(STATE_MOMENTUM);
-  const hasP = !!loadPos(STATE_PULLBACK);
-  const hasC = !!loadPos(STATE_CONTINUATION);
-  const hasT = !!loadPos(STATE_TREND);
+  const [hasM, hasP, hasC, hasT] = await Promise.all([
+    loadPos(STATE_MOMENTUM).then(Boolean),
+    loadPos(STATE_PULLBACK).then(Boolean),
+    loadPos(STATE_CONTINUATION).then(Boolean),
+    loadPos(STATE_TREND).then(Boolean),
+  ]);
 
   // ── Crash guard — only thing BTC is used for ──────────────────────────────
   if (btcChange5m <= CRASH_BTC_5M || btcChange15m <= CRASH_BTC_15M || btcChange1h <= CRASH_BTC_1H) {
@@ -396,7 +460,7 @@ async function main() {
       if (!c.pass) console.log(`       Need: ${c.required} | Got: ${c.actual}`);
     });
     if (mFailed.length === 0) {
-      const openPositions = [loadPos(STATE_PULLBACK), loadPos(STATE_CONTINUATION)];
+      const openPositions = [await loadPos(STATE_PULLBACK), await loadPos(STATE_CONTINUATION), await loadPos(STATE_TREND)];
       if (tooCloseToExisting(solPrice, openPositions)) {
         console.log(`  🚫 MOMENTUM blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
       } else {
@@ -431,7 +495,7 @@ async function main() {
       if (!c.pass) console.log(`       Need: ${c.required} | Got: ${c.actual}`);
     });
     if (pFailed.length === 0) {
-      const openPositions = [loadPos(STATE_MOMENTUM), loadPos(STATE_CONTINUATION)];
+      const openPositions = [await loadPos(STATE_MOMENTUM), await loadPos(STATE_CONTINUATION), await loadPos(STATE_TREND)];
       if (tooCloseToExisting(solPrice, openPositions)) {
         console.log(`  🚫 PULLBACK blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
       } else {
@@ -470,7 +534,7 @@ async function main() {
       if (!c.pass) console.log(`       Need: ${c.required} | Got: ${c.actual}`);
     });
     if (cFailed.length === 0) {
-      const openPositions = [loadPos(STATE_MOMENTUM), loadPos(STATE_PULLBACK)];
+      const openPositions = [await loadPos(STATE_MOMENTUM), await loadPos(STATE_PULLBACK), await loadPos(STATE_TREND)];
       if (tooCloseToExisting(solPrice, openPositions)) {
         console.log(`  🚫 CONTINUATION blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
       } else {
@@ -505,7 +569,7 @@ async function main() {
       if (!c.pass) console.log(`       Need: ${c.required} | Got: ${c.actual}`);
     });
     if (tFailed.length === 0) {
-      const openPositions = [loadPos(STATE_MOMENTUM), loadPos(STATE_PULLBACK), loadPos(STATE_CONTINUATION)];
+      const openPositions = [await loadPos(STATE_MOMENTUM), await loadPos(STATE_PULLBACK), await loadPos(STATE_CONTINUATION)];
       if (tooCloseToExisting(solPrice, openPositions)) {
         console.log(`  🚫 TREND blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
       } else {
