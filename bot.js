@@ -33,14 +33,17 @@ const PULLBACK_SOL_RSI_MAX  = 50;    // 48.5 now enters
 const PULLBACK_TP           =  1.0;  // TP +1.0%
 
 // Continuation mode: SOL breaks above recent high
-const BREAKOUT_LOOKBACK     =  4;    // Look back 4 candles (~20m) — early breakout
+const BREAKOUT_LOOKBACK     =  4;    // Look back 4 candles (~20m)
 const BREAKOUT_SOL_RSI_MIN  = 45;    // 45-75 = real continuation zone
 const BREAKOUT_SOL_RSI_MAX  = 75;    // Not already overbought
 const BREAKOUT_TP           =  1.0;  // TP +1.0%
-const BREAKOUT_TOLERANCE    =  0.995; // Enter within 0.5% of high — SOL breaks dirty
+const BREAKOUT_TOLERANCE    =  0.997; // Less aggressive — avoid FOMO entries
 
-// Max hold time — avoid dead trades blocking capital
-const MAX_HOLD_MINUTES      = 45;    // Exit after 45 min if TP not hit
+// Max hold time — free slots faster for 5m scalping
+const MAX_HOLD_MINUTES      = 30;    // Exit after 30 min if TP not hit
+
+// Anti-duplicate — block entry if price too close to existing position
+const MIN_ENTRY_DISTANCE    =  0.25; // % minimum distance from any open position entry
 
 // Candle timing: wait N ms after cron fires to avoid reading incomplete candle
 const CANDLE_DELAY_MS       = 8000;  // 8 seconds — lets the 5m candle close properly
@@ -119,6 +122,14 @@ function logTrade({ date, time, side, quantity, price, mode, tag, orderId = "PAP
 
 function saveLog(data) {
   fs.writeFileSync(LOG_FILE, JSON.stringify(data, null, 2));
+}
+
+// Anti-duplicate check — block if current price too close to any open position
+function tooCloseToExisting(currentPrice, positions) {
+  return positions.filter(Boolean).some((p) => {
+    const dist = Math.abs((currentPrice - p.entryPrice) / p.entryPrice * 100);
+    return dist < MIN_ENTRY_DISTANCE;
+  });
 }
 
 // ─── BitGet order ─────────────────────────────────────────────────────────────
@@ -276,13 +287,18 @@ async function main() {
       if (!c.pass) console.log(`       Need: ${c.required} | Got: ${c.actual}`);
     });
     if (mFailed.length === 0) {
-      const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
-      console.log(`  ✅ MOMENTUM ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${MOMENTUM_TP}%`);
-      try {
-        const order = await placeOrder("Buy", qty, "MOMENTUM");
-        savePos(STATE_MOMENTUM, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "MOMENTUM" });
-        logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "MOMENTUM", orderId: order?.orderId });
-      } catch (e) { console.error("  ❌ Momentum entry failed:", e.message); }
+      const openPositions = [loadPos(STATE_PULLBACK), loadPos(STATE_CONTINUATION)];
+      if (tooCloseToExisting(solPrice, openPositions)) {
+        console.log(`  🚫 MOMENTUM blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
+      } else {
+        const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
+        console.log(`  ✅ MOMENTUM ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${MOMENTUM_TP}%`);
+        try {
+          const order = await placeOrder("Buy", qty, "MOMENTUM");
+          savePos(STATE_MOMENTUM, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "MOMENTUM" });
+          logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "MOMENTUM", orderId: order?.orderId });
+        } catch (e) { console.error("  ❌ Momentum entry failed:", e.message); }
+      }
     } else {
       console.log(`  🚫 MOMENTUM blocked — ${mFailed.length} failed`);
     }
@@ -306,13 +322,18 @@ async function main() {
       if (!c.pass) console.log(`       Need: ${c.required} | Got: ${c.actual}`);
     });
     if (pFailed.length === 0) {
-      const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
-      console.log(`  ✅ PULLBACK ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${PULLBACK_TP}%`);
-      try {
-        const order = await placeOrder("Buy", qty, "PULLBACK");
-        savePos(STATE_PULLBACK, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "PULLBACK" });
-        logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "PULLBACK", orderId: order?.orderId });
-      } catch (e) { console.error("  ❌ Pullback entry failed:", e.message); }
+      const openPositions = [loadPos(STATE_MOMENTUM), loadPos(STATE_CONTINUATION)];
+      if (tooCloseToExisting(solPrice, openPositions)) {
+        console.log(`  🚫 PULLBACK blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
+      } else {
+        const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
+        console.log(`  ✅ PULLBACK ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${PULLBACK_TP}%`);
+        try {
+          const order = await placeOrder("Buy", qty, "PULLBACK");
+          savePos(STATE_PULLBACK, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "PULLBACK" });
+          logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "PULLBACK", orderId: order?.orderId });
+        } catch (e) { console.error("  ❌ Pullback entry failed:", e.message); }
+      }
     } else {
       console.log(`  🚫 PULLBACK blocked — ${pFailed.length} failed`);
     }
@@ -340,13 +361,18 @@ async function main() {
       if (!c.pass) console.log(`       Need: ${c.required} | Got: ${c.actual}`);
     });
     if (cFailed.length === 0) {
-      const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
-      console.log(`  ✅ CONTINUATION ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${BREAKOUT_TP}%`);
-      try {
-        const order = await placeOrder("Buy", qty, "CONTINUATION");
-        savePos(STATE_CONTINUATION, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "CONTINUATION" });
-        logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "CONTINUATION", orderId: order?.orderId });
-      } catch (e) { console.error("  ❌ Continuation entry failed:", e.message); }
+      const openPositions = [loadPos(STATE_MOMENTUM), loadPos(STATE_PULLBACK)];
+      if (tooCloseToExisting(solPrice, openPositions)) {
+        console.log(`  🚫 CONTINUATION blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
+      } else {
+        const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
+        console.log(`  ✅ CONTINUATION ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${BREAKOUT_TP}%`);
+        try {
+          const order = await placeOrder("Buy", qty, "CONTINUATION");
+          savePos(STATE_CONTINUATION, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "CONTINUATION" });
+          logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "CONTINUATION", orderId: order?.orderId });
+        } catch (e) { console.error("  ❌ Continuation entry failed:", e.message); }
+      }
     } else {
       console.log(`  🚫 CONTINUATION blocked — ${cFailed.length} failed`);
     }
