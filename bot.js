@@ -1,4 +1,3 @@
-
 import fs from "fs";
 import https from "https";
 
@@ -30,15 +29,15 @@ const MOMENTUM_TP           =  0.8;  // TP +0.8% — realistic 5m scalp
 const PULLBACK_BTC_MIN_1H   = -0.1;  // BTC pulled back at least 0.1% in 1h (much more realistic)
 const PULLBACK_BTC_MAX_1H   = -2.5;  // Not a full crash
 const PULLBACK_SOL_MULT     =  1.3;  // SOL dropped 1.3x more than BTC
-const PULLBACK_SOL_RSI_MAX  = 48;    // Realistic oversold for 5m SOL
+const PULLBACK_SOL_RSI_MAX  = 50;    // 48.5 now enters
 const PULLBACK_TP           =  1.0;  // TP +1.0%
 
 // Continuation mode: SOL breaks above recent high
 const BREAKOUT_LOOKBACK     =  4;    // Look back 4 candles (~20m) — early breakout
-const BREAKOUT_SOL_RSI_MIN  = 50;    // RSI above 50 — momentum behind move
+const BREAKOUT_SOL_RSI_MIN  = 45;    // 45-75 = real continuation zone
 const BREAKOUT_SOL_RSI_MAX  = 75;    // Not already overbought
 const BREAKOUT_TP           =  1.0;  // TP +1.0%
-const BREAKOUT_TOLERANCE    =  0.998; // Enter when close >= recentHigh * 0.998 (0.2% before breakout)
+const BREAKOUT_TOLERANCE    =  0.995; // Enter within 0.5% of high — SOL breaks dirty
 
 // Max hold time — avoid dead trades blocking capital
 const MAX_HOLD_MINUTES      = 45;    // Exit after 45 min if TP not hit
