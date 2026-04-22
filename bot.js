@@ -135,9 +135,81 @@ function logTrade({ date, time, side, quantity, price, mode, tag, orderId = "PAP
   const total = quantity * price;
   const fee   = total * 0.0006;
   const net   = side === "Buy" ? total + fee : total - fee;
-  fs.appendFileSync(TRADES_FILE,
-    `${date},${time},BitGet,SOLUSDT,${side},${quantity.toFixed(4)},${price.toFixed(4)},${total.toFixed(4)},${fee.toFixed(4)},${net.toFixed(4)},${orderId},${mode},${tag}\n`
-  );
+  const line  = `${date},${time},BitGet,SOLUSDT,${side},${quantity.toFixed(4)},${price.toFixed(4)},${total.toFixed(4)},${fee.toFixed(4)},${net.toFixed(4)},${orderId},${mode},${tag}\n`;
+  fs.appendFileSync(TRADES_FILE, line);
+  // Sync to GitHub after every trade
+  syncTradesToGitHub().catch((e) => console.error("  ⚠️ GitHub sync failed:", e.message));
+}
+
+// ─── GitHub API sync ──────────────────────────────────────────────────────────
+async function syncTradesToGitHub() {
+  const token = process.env.GITHUB_TOKEN;
+  const repo  = process.env.GITHUB_REPO;
+  if (!token || !repo) return;
+
+  const content = fs.existsSync(TRADES_FILE)
+    ? fs.readFileSync(TRADES_FILE, "utf8")
+    : "Date,Time,Exchange,Symbol,Side,Quantity,Price,TotalUSD,Fee,NetAmount,OrderID,Mode,Tag\n";
+
+  const encoded = Buffer.from(content).toString("base64");
+
+  // First get the current SHA of the file (needed for update)
+  const getSha = () => new Promise((resolve) => {
+    const options = {
+      hostname: "api.github.com",
+      path: `/repos/${repo}/contents/trades.csv`,
+      method: "GET",
+      headers: {
+        "Authorization": `token ${token}`,
+        "User-Agent": "sol-btc-bot",
+        "Accept": "application/vnd.github.v3+json",
+      },
+    };
+    https.get(options, (res) => {
+      let d = "";
+      res.on("data", (c) => (d += c));
+      res.on("end", () => {
+        try { resolve(JSON.parse(d).sha || null); } catch { resolve(null); }
+      });
+    }).on("error", () => resolve(null));
+  });
+
+  const sha  = await getSha();
+  const body = JSON.stringify({
+    message: `trade log ${new Date().toISOString().slice(0, 16)}`,
+    content: encoded,
+    ...(sha ? { sha } : {}),
+  });
+
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: "api.github.com",
+      path: `/repos/${repo}/contents/trades.csv`,
+      method: "PUT",
+      headers: {
+        "Authorization": `token ${token}`,
+        "User-Agent": "sol-btc-bot",
+        "Accept": "application/vnd.github.v3+json",
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let d = "";
+      res.on("data", (c) => (d += c));
+      res.on("end", () => {
+        if (res.statusCode === 200 || res.statusCode === 201) {
+          console.log("  ✅ trades.csv synced to GitHub");
+          resolve();
+        } else {
+          reject(new Error(`GitHub API ${res.statusCode}`));
+        }
+      });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
 }
 
 function saveLog(data) {
