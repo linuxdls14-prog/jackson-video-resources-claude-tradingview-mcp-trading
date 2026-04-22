@@ -1,4 +1,3 @@
-
 import fs from "fs";
 import https from "https";
 
@@ -23,7 +22,7 @@ const CRASH_BTC_1H          = -6.0;  // BTC drops 6% in 1h = extreme crash, exit
 
 // Momentum mode: SOL lagging BTC (BTC as additional advantage, not requirement)
 const MOMENTUM_LAG_RATIO    =  0.6;  // SOL moved less than 60% of BTC — lag confirmed
-const MOMENTUM_SOL_RSI_MAX  = 74;    // Momentum strong without chasing the ceiling
+const MOMENTUM_SOL_RSI_MAX  = 80;    // RSI 80 = strength in trends, not ceiling
 const MOMENTUM_TP           =  0.8;  // TP +0.8% — realistic 5m scalp
 
 // Trailing stop — locks in profit once trade moves in our favor
@@ -40,7 +39,7 @@ const PULLBACK_TP           =  1.0;  // TP +1.0%
 // Continuation mode: SOL breaks above recent high
 const BREAKOUT_LOOKBACK     =  4;    // Look back 4 candles (~20m)
 const BREAKOUT_SOL_RSI_MIN  = 45;    // 45-75 = real continuation zone
-const BREAKOUT_SOL_RSI_MAX  = 75;    // Not already overbought
+const BREAKOUT_SOL_RSI_MAX  = 82;    // RSI 80 in SOL = trend strength, not overbought
 const BREAKOUT_TP           =  1.0;  // TP +1.0%
 const BREAKOUT_TOLERANCE    =  0.997; // Less aggressive — avoid FOMO entries
 
