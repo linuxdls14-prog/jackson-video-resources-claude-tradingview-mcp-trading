@@ -40,11 +40,14 @@ const PULLBACK_TP           =  1.0;  // TP +1.0%
 const BREAKOUT_LOOKBACK     =  4;    // Look back 4 candles (~20m)
 const BREAKOUT_SOL_RSI_MIN  = 45;    // 45-75 = real continuation zone
 const BREAKOUT_SOL_RSI_MAX  = 82;    // RSI 80 in SOL = trend strength, not overbought
-const BREAKOUT_TP           =  1.0;  // TP +1.0%
+const BREAKOUT_TP           =  0.85; // TP +0.85%
 const BREAKOUT_TOLERANCE    =  0.994; // 0.6% tolerance — SOL breaks dirty
 
-// Max hold time — free slots faster for 5m scalping
-const MAX_HOLD_MINUTES      = 30;    // Exit after 30 min if TP not hit
+// Max hold time per mode
+const MOMENTUM_MAX_MINUTES     = 45;
+const CONTINUATION_MAX_MINUTES = 60;
+const PULLBACK_MAX_MINUTES     = 45;
+const TREND_MAX_MINUTES        = 60;
 
 // Trend mode: price above EMA8, RSI healthy, BTC not crashing
 const TREND_RSI_MIN         = 55;    // RSI above 55 = trend has momentum
@@ -264,16 +267,16 @@ async function placeOrder(side, quantity, tag) {
 }
 
 // ─── Handle open position ─────────────────────────────────────────────────────
-async function handlePosition(pos, stateFile, tag, tp, solPrice, btcChange15m, btcChange1h, now) {
+async function handlePosition(pos, stateFile, tag, tp, maxMinutes, solPrice, btcChange15m, btcChange1h, now) {
   const hoursOpen   = (now - new Date(pos.entryTime)) / 3600000;
   const minutesOpen = hoursOpen * 60;
   const pnlPct      = pct(pos.entryPrice, solPrice);
-  const date      = now.toISOString().slice(0, 10);
-  const time      = now.toISOString().slice(11, 19);
+  const date        = now.toISOString().slice(0, 10);
+  const time        = now.toISOString().slice(11, 19);
 
   console.log(`\n── Position [${tag}] ──────────────────────────────────────`);
   console.log(`  Entry: $${pos.entryPrice.toFixed(4)} | Now: $${solPrice.toFixed(4)}`);
-  console.log(`  PnL: ${pnlPct.toFixed(2)}% (${(pnlPct * LEVERAGE).toFixed(2)}% levered) | Open: ${minutesOpen.toFixed(0)}min | TP: +${tp}% | Max: ${MAX_HOLD_MINUTES}min`);
+  console.log(`  PnL: ${pnlPct.toFixed(2)}% (${(pnlPct * LEVERAGE).toFixed(2)}% levered) | Open: ${minutesOpen.toFixed(0)}min | TP: +${tp}% | Max: ${maxMinutes}min`);
 
   let exitReason = null;
 
@@ -291,8 +294,8 @@ async function handlePosition(pos, stateFile, tag, tp, solPrice, btcChange15m, b
     exitReason = `✅ Take profit +${pnlPct.toFixed(2)}%`;
   else if (trailingStop !== null && pnlPct <= trailingStop)
     exitReason = `🔒 Trailing stop — locked +${trailingStop.toFixed(2)}%, now at +${pnlPct.toFixed(2)}%`;
-  else if (minutesOpen >= MAX_HOLD_MINUTES)
-    exitReason = `⏰ Max hold ${MAX_HOLD_MINUTES}min reached (PnL: ${pnlPct.toFixed(2)}%) — freeing capital`;
+  else if (minutesOpen >= maxMinutes)
+    exitReason = `⏰ Max hold ${maxMinutes}min reached (PnL: ${pnlPct.toFixed(2)}%) — freeing capital`;
 
   if (exitReason) {
     console.log(`  EXIT: ${exitReason}`);
@@ -354,10 +357,10 @@ async function main() {
   const posPullback     = loadPos(STATE_PULLBACK);
   const posContinuation = loadPos(STATE_CONTINUATION);
   const posTrend        = loadPos(STATE_TREND);
-  if (posMomentum)     await handlePosition(posMomentum,     STATE_MOMENTUM,     "MOMENTUM",     MOMENTUM_TP,  solPrice, btcChange15m, btcChange1h, now);
-  if (posPullback)     await handlePosition(posPullback,     STATE_PULLBACK,     "PULLBACK",     PULLBACK_TP,  solPrice, btcChange15m, btcChange1h, now);
-  if (posContinuation) await handlePosition(posContinuation, STATE_CONTINUATION, "CONTINUATION", BREAKOUT_TP,  solPrice, btcChange15m, btcChange1h, now);
-  if (posTrend)        await handlePosition(posTrend,        STATE_TREND,        "TREND",        TREND_TP,     solPrice, btcChange15m, btcChange1h, now);
+  if (posMomentum)     await handlePosition(posMomentum,     STATE_MOMENTUM,     "MOMENTUM",     MOMENTUM_TP,  MOMENTUM_MAX_MINUTES,     solPrice, btcChange15m, btcChange1h, now);
+  if (posPullback)     await handlePosition(posPullback,     STATE_PULLBACK,     "PULLBACK",     PULLBACK_TP,  PULLBACK_MAX_MINUTES,     solPrice, btcChange15m, btcChange1h, now);
+  if (posContinuation) await handlePosition(posContinuation, STATE_CONTINUATION, "CONTINUATION", BREAKOUT_TP,  CONTINUATION_MAX_MINUTES, solPrice, btcChange15m, btcChange1h, now);
+  if (posTrend)        await handlePosition(posTrend,        STATE_TREND,        "TREND",        TREND_TP,     TREND_MAX_MINUTES,        solPrice, btcChange15m, btcChange1h, now);
 
   // Reload state after potential exits
   const hasM = !!loadPos(STATE_MOMENTUM);
