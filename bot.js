@@ -1,3 +1,4 @@
+
 import fs from "fs";
 import https from "https";
 
@@ -26,17 +27,21 @@ const MOMENTUM_SOL_RSI_MAX  = 72;    // SOL not overbought
 const MOMENTUM_TP           =  0.8;  // TP +0.8% — realistic 5m scalp
 
 // Pullback mode: SOL dropped harder than BTC = oversold bounce
-const PULLBACK_BTC_MIN_1H   = -0.3;  // BTC pulled back at least 0.3% in 1h
-const PULLBACK_BTC_MAX_1H   = -5.0;  // Not a full crash
+const PULLBACK_BTC_MIN_1H   = -0.1;  // BTC pulled back at least 0.1% in 1h (much more realistic)
+const PULLBACK_BTC_MAX_1H   = -2.5;  // Not a full crash
 const PULLBACK_SOL_MULT     =  1.3;  // SOL dropped 1.3x more than BTC
 const PULLBACK_SOL_RSI_MAX  = 48;    // Realistic oversold for 5m SOL
 const PULLBACK_TP           =  1.0;  // TP +1.0%
 
 // Continuation mode: SOL breaks above recent high
-const BREAKOUT_LOOKBACK     =  6;    // Look back 6 candles (~30m)
+const BREAKOUT_LOOKBACK     =  4;    // Look back 4 candles (~20m) — early breakout
 const BREAKOUT_SOL_RSI_MIN  = 50;    // RSI above 50 — momentum behind move
 const BREAKOUT_SOL_RSI_MAX  = 75;    // Not already overbought
 const BREAKOUT_TP           =  1.0;  // TP +1.0%
+const BREAKOUT_TOLERANCE    =  0.998; // Enter when close >= recentHigh * 0.998 (0.2% before breakout)
+
+// Max hold time — avoid dead trades blocking capital
+const MAX_HOLD_MINUTES      = 45;    // Exit after 45 min if TP not hit
 
 // Candle timing: wait N ms after cron fires to avoid reading incomplete candle
 const CANDLE_DELAY_MS       = 8000;  // 8 seconds — lets the 5m candle close properly
@@ -158,14 +163,15 @@ async function placeOrder(side, quantity, tag) {
 
 // ─── Handle open position ─────────────────────────────────────────────────────
 async function handlePosition(pos, stateFile, tag, tp, solPrice, btcChange15m, btcChange1h, now) {
-  const hoursOpen = (now - new Date(pos.entryTime)) / 3600000;
-  const pnlPct    = pct(pos.entryPrice, solPrice);
+  const hoursOpen   = (now - new Date(pos.entryTime)) / 3600000;
+  const minutesOpen = hoursOpen * 60;
+  const pnlPct      = pct(pos.entryPrice, solPrice);
   const date      = now.toISOString().slice(0, 10);
   const time      = now.toISOString().slice(11, 19);
 
   console.log(`\n── Position [${tag}] ──────────────────────────────────────`);
   console.log(`  Entry: $${pos.entryPrice.toFixed(4)} | Now: $${solPrice.toFixed(4)}`);
-  console.log(`  PnL: ${pnlPct.toFixed(2)}% (${(pnlPct * LEVERAGE).toFixed(2)}% levered) | Open: ${hoursOpen.toFixed(1)}h | TP: +${tp}%`);
+  console.log(`  PnL: ${pnlPct.toFixed(2)}% (${(pnlPct * LEVERAGE).toFixed(2)}% levered) | Open: ${minutesOpen.toFixed(0)}min | TP: +${tp}% | Max: ${MAX_HOLD_MINUTES}min`);
 
   let exitReason = null;
   if (btcChange15m <= CRASH_BTC_15M)
@@ -174,6 +180,8 @@ async function handlePosition(pos, stateFile, tag, tp, solPrice, btcChange15m, b
     exitReason = `🚨 CRASH — BTC ${btcChange1h.toFixed(2)}% in 1h`;
   else if (pnlPct >= tp)
     exitReason = `✅ Take profit +${pnlPct.toFixed(2)}%`;
+  else if (minutesOpen >= MAX_HOLD_MINUTES)
+    exitReason = `⏰ Max hold ${MAX_HOLD_MINUTES}min reached (PnL: ${pnlPct.toFixed(2)}%) — freeing capital`;
 
   if (exitReason) {
     console.log(`  EXIT: ${exitReason}`);
@@ -317,10 +325,11 @@ async function main() {
   if (!hasC) {
     const recentHighs  = sol5m.slice(-BREAKOUT_LOOKBACK - 1, -1).map((c) => c.high);
     const highestHigh  = Math.max(...recentHighs);
-    const isBreakout   = solPrice > highestHigh;
+    const isBreakout   = solPrice >= highestHigh * BREAKOUT_TOLERANCE;
+    const distToHigh   = ((highestHigh - solPrice) / highestHigh) * 100;
 
     const cConds = [
-      { label: `SOL close above highest high of last ${BREAKOUT_LOOKBACK} candles`, pass: isBreakout,                                              actual: `$${solPrice.toFixed(4)} vs high $${highestHigh.toFixed(4)}`, required: "close > recent high" },
+      { label: `SOL at/above high of last ${BREAKOUT_LOOKBACK} candles (±0.2%)`, pass: isBreakout, actual: `$${solPrice.toFixed(4)} vs high $${highestHigh.toFixed(4)} (${distToHigh.toFixed(2)}% away)`, required: `>= high × ${BREAKOUT_TOLERANCE}` },
       { label: `SOL RSI between ${BREAKOUT_SOL_RSI_MIN} and ${BREAKOUT_SOL_RSI_MAX}`,  pass: solRSI !== null && solRSI >= BREAKOUT_SOL_RSI_MIN && solRSI < BREAKOUT_SOL_RSI_MAX, actual: solRSI?.toFixed(1) || "N/A", required: `${BREAKOUT_SOL_RSI_MIN}–${BREAKOUT_SOL_RSI_MAX}` },
       { label: "BTC not crashing",                                                   pass: btcChange5m > CRASH_BTC_5M,                             actual: `${btcChange5m.toFixed(2)}%`, required: `> ${CRASH_BTC_5M}%` },
       { label: "Daily limit OK",                                                     pass: todayTradeCount() < MAX_TRADES_PER_DAY,                 actual: `${todayTradeCount()} today`,  required: `< ${MAX_TRADES_PER_DAY}` },
