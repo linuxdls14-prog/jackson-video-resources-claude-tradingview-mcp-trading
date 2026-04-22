@@ -364,7 +364,7 @@ async function handlePosition(pos, stateFile, tag, tp, maxMinutes, solPrice, btc
         mode: PAPER_TRADING ? "Paper" : "Live", tag, orderId: order?.orderId });
       console.log("  Logged → trades.csv");
     } catch (e) { console.error("  ❌ Exit failed:", e.message); }
-    clearPos(stateFile);
+    await clearPos(stateFile);
     return true;
   }
   console.log("  ⏳ Holding");
@@ -468,7 +468,7 @@ async function main() {
         console.log(`  ✅ MOMENTUM ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${MOMENTUM_TP}%`);
         try {
           const order = await placeOrder("Buy", qty, "MOMENTUM");
-          savePos(STATE_MOMENTUM, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "MOMENTUM" });
+          await savePos(STATE_MOMENTUM, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "MOMENTUM" });
           logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "MOMENTUM", orderId: order?.orderId });
         } catch (e) { console.error("  ❌ Momentum entry failed:", e.message); }
       }
@@ -503,7 +503,7 @@ async function main() {
         console.log(`  ✅ PULLBACK ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${PULLBACK_TP}%`);
         try {
           const order = await placeOrder("Buy", qty, "PULLBACK");
-          savePos(STATE_PULLBACK, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "PULLBACK" });
+          await savePos(STATE_PULLBACK, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "PULLBACK" });
           logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "PULLBACK", orderId: order?.orderId });
         } catch (e) { console.error("  ❌ Pullback entry failed:", e.message); }
       }
@@ -542,7 +542,7 @@ async function main() {
         console.log(`  ✅ CONTINUATION ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${BREAKOUT_TP}%`);
         try {
           const order = await placeOrder("Buy", qty, "CONTINUATION");
-          savePos(STATE_CONTINUATION, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "CONTINUATION" });
+          await savePos(STATE_CONTINUATION, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "CONTINUATION" });
           logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "CONTINUATION", orderId: order?.orderId });
         } catch (e) { console.error("  ❌ Continuation entry failed:", e.message); }
       }
@@ -577,7 +577,7 @@ async function main() {
         console.log(`  ✅ TREND ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${TREND_TP}%`);
         try {
           const order = await placeOrder("Buy", qty, "TREND");
-          savePos(STATE_TREND, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "TREND" });
+          await savePos(STATE_TREND, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "TREND" });
           logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "TREND", orderId: order?.orderId });
         } catch (e) { console.error("  ❌ Trend entry failed:", e.message); }
       }
