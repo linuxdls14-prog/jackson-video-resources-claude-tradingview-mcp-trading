@@ -32,7 +32,7 @@ const TRAIL_LOCK            =  0.25; // % — lock in at least this much profit
 // Pullback mode: SOL dropped harder than BTC = oversold bounce
 const PULLBACK_BTC_MIN_1H   = -0.1;  // BTC pulled back at least 0.1% in 1h (much more realistic)
 const PULLBACK_BTC_MAX_1H   = -2.5;  // Not a full crash
-const PULLBACK_SOL_MULT     =  1.3;  // SOL dropped 1.3x more than BTC
+const PULLBACK_SOL_MULT     =  1.6;  // SOL dropped 1.6x more than BTC — less restrictive
 const PULLBACK_SOL_RSI_MAX  = 50;    // 48.5 now enters
 const PULLBACK_TP           =  1.0;  // TP +1.0%
 
@@ -41,13 +41,18 @@ const BREAKOUT_LOOKBACK     =  4;    // Look back 4 candles (~20m)
 const BREAKOUT_SOL_RSI_MIN  = 45;    // 45-75 = real continuation zone
 const BREAKOUT_SOL_RSI_MAX  = 82;    // RSI 80 in SOL = trend strength, not overbought
 const BREAKOUT_TP           =  1.0;  // TP +1.0%
-const BREAKOUT_TOLERANCE    =  0.997; // Less aggressive — avoid FOMO entries
+const BREAKOUT_TOLERANCE    =  0.994; // 0.6% tolerance — SOL breaks dirty
 
 // Max hold time — free slots faster for 5m scalping
 const MAX_HOLD_MINUTES      = 30;    // Exit after 30 min if TP not hit
 
+// Trend mode: price above EMA8, RSI healthy, BTC not crashing
+const TREND_RSI_MIN         = 55;    // RSI above 55 = trend has momentum
+const TREND_RSI_MAX         = 82;    // Not overbought
+const TREND_TP              =  0.8;  // TP +0.8%
+
 // Anti-duplicate — block entry if price too close to existing position
-const MIN_ENTRY_DISTANCE    =  0.25; // % minimum distance from any open position entry
+const MIN_ENTRY_DISTANCE    =  0.25;
 
 // Candle timing: wait N ms after cron fires to avoid reading incomplete candle
 const CANDLE_DELAY_MS       = 8000;  // 8 seconds — lets the 5m candle close properly
@@ -58,6 +63,7 @@ const TRADES_FILE        = "trades.csv";
 const STATE_MOMENTUM     = "position-momentum.json";
 const STATE_PULLBACK     = "position-pullback.json";
 const STATE_CONTINUATION = "position-continuation.json";
+const STATE_TREND        = "position-trend.json";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function httpsGet(url) {
@@ -68,6 +74,16 @@ function httpsGet(url) {
       res.on("end", () => { try { resolve(JSON.parse(data)); } catch (e) { reject(e); } });
     }).on("error", reject);
   });
+}
+
+function calcEMA(closes, period) {
+  if (closes.length < period) return null;
+  let ema = closes.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  const k = 2 / (period + 1);
+  for (let i = period; i < closes.length; i++) {
+    ema = closes[i] * k + ema * (1 - k);
+  }
+  return ema;
 }
 
 function calcRSI(closes, period = 14) {
@@ -251,7 +267,9 @@ async function main() {
   const btcChange1h  = pct(btc1h[btc1h.length - 2].open,  btcPrice);
   const solChange15m = pct(sol5m[sol5m.length - 4].close,  solPrice);
   const solChange1h  = pct(sol1h[sol1h.length - 2].open,   solPrice);
-  const solRSI       = calcRSI(sol5m.map((c) => c.close), 14);
+  const solCloses    = sol5m.map((c) => c.close);
+  const solRSI       = calcRSI(solCloses, 14);
+  const solEMA8      = calcEMA(solCloses, 8);
   const solBtcDiff1h = solChange1h - btcChange1h;
 
   console.log("── Market ────────────────────────────────────────────────");
@@ -263,14 +281,17 @@ async function main() {
   const posMomentum     = loadPos(STATE_MOMENTUM);
   const posPullback     = loadPos(STATE_PULLBACK);
   const posContinuation = loadPos(STATE_CONTINUATION);
+  const posTrend        = loadPos(STATE_TREND);
   if (posMomentum)     await handlePosition(posMomentum,     STATE_MOMENTUM,     "MOMENTUM",     MOMENTUM_TP,  solPrice, btcChange15m, btcChange1h, now);
   if (posPullback)     await handlePosition(posPullback,     STATE_PULLBACK,     "PULLBACK",     PULLBACK_TP,  solPrice, btcChange15m, btcChange1h, now);
   if (posContinuation) await handlePosition(posContinuation, STATE_CONTINUATION, "CONTINUATION", BREAKOUT_TP,  solPrice, btcChange15m, btcChange1h, now);
+  if (posTrend)        await handlePosition(posTrend,        STATE_TREND,        "TREND",        TREND_TP,     solPrice, btcChange15m, btcChange1h, now);
 
   // Reload state after potential exits
   const hasM = !!loadPos(STATE_MOMENTUM);
   const hasP = !!loadPos(STATE_PULLBACK);
   const hasC = !!loadPos(STATE_CONTINUATION);
+  const hasT = !!loadPos(STATE_TREND);
 
   // ── Crash guard — only thing BTC is used for ──────────────────────────────
   if (btcChange5m <= CRASH_BTC_5M || btcChange15m <= CRASH_BTC_15M || btcChange1h <= CRASH_BTC_1H) {
@@ -393,7 +414,42 @@ async function main() {
     console.log("\n  [CONTINUATION] Already in trade");
   }
 
-  saveLog({ btcPrice, solPrice, btcChange5m, btcChange15m, btcChange1h, solChange15m, solChange1h, solBtcDiff1h, solRSI, hasM, hasP, hasC, timestamp: now.toISOString() });
+  // ── TREND MODE ────────────────────────────────────────────────────────────
+  if (!hasT) {
+    const aboveEMA8 = solEMA8 !== null && solPrice > solEMA8;
+    const tConds = [
+      { label: "SOL price above EMA8 (uptrend)",          pass: aboveEMA8,                                                          actual: `$${solPrice.toFixed(4)} vs EMA8 $${solEMA8?.toFixed(4) || "N/A"}`, required: "price > EMA8" },
+      { label: `SOL RSI between ${TREND_RSI_MIN} and ${TREND_RSI_MAX}`, pass: solRSI !== null && solRSI >= TREND_RSI_MIN && solRSI <= TREND_RSI_MAX, actual: solRSI?.toFixed(1) || "N/A", required: `${TREND_RSI_MIN}–${TREND_RSI_MAX}` },
+      { label: "BTC not crashing",                        pass: btcChange5m > CRASH_BTC_5M,                                         actual: `${btcChange5m.toFixed(2)}%`,  required: `> ${CRASH_BTC_5M}%` },
+      { label: "Daily limit OK",                          pass: todayTradeCount() < MAX_TRADES_PER_DAY,                              actual: `${todayTradeCount()} today`,  required: `< ${MAX_TRADES_PER_DAY}` },
+    ];
+    const tFailed = tConds.filter((c) => !c.pass);
+    console.log("\n  [TREND] Price above EMA8, RSI healthy:");
+    tConds.forEach((c) => {
+      console.log(`    ${c.pass ? "✅" : "🚫"} ${c.label}`);
+      if (!c.pass) console.log(`       Need: ${c.required} | Got: ${c.actual}`);
+    });
+    if (tFailed.length === 0) {
+      const openPositions = [loadPos(STATE_MOMENTUM), loadPos(STATE_PULLBACK), loadPos(STATE_CONTINUATION)];
+      if (tooCloseToExisting(solPrice, openPositions)) {
+        console.log(`  🚫 TREND blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
+      } else {
+        const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
+        console.log(`  ✅ TREND ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${TREND_TP}%`);
+        try {
+          const order = await placeOrder("Buy", qty, "TREND");
+          savePos(STATE_TREND, { entryPrice: solPrice, entryTime: now.toISOString(), quantity: qty, orderId: order?.orderId, mode: "TREND" });
+          logTrade({ date, time, side: "Buy", quantity: qty, price: solPrice, mode: PAPER_TRADING ? "Paper" : "Live", tag: "TREND", orderId: order?.orderId });
+        } catch (e) { console.error("  ❌ Trend entry failed:", e.message); }
+      }
+    } else {
+      console.log(`  🚫 TREND blocked — ${tFailed.length} failed`);
+    }
+  } else {
+    console.log("\n  [TREND] Already in trade");
+  }
+
+  saveLog({ btcPrice, solPrice, btcChange5m, btcChange15m, btcChange1h, solChange15m, solChange1h, solBtcDiff1h, solRSI, solEMA8, hasM, hasP, hasC, hasT, timestamp: now.toISOString() });
 }
 
 main().catch((e) => { console.error("Bot error:", e); process.exit(1); });
