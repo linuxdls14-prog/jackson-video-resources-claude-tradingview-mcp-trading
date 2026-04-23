@@ -57,16 +57,26 @@ const TREND_TP              =  0.8;  // TP +0.8%
 // Anti-duplicate — block entry if price too close to existing position
 const MIN_ENTRY_DISTANCE    =  0.25;
 
+// Cooldown after max hold exit — don't re-enter same mode for 30min
+const COOLDOWN_MINUTES      = 30;
+
+// BTC trend filter — if BTC 1h negative, only PULLBACK can enter
+const BTC_TREND_MIN_1H      =  0.0;  // BTC 1h must be >= 0% for trend-following modes
+
 // Candle timing: wait N ms after cron fires to avoid reading incomplete candle
-const CANDLE_DELAY_MS       = 8000;  // 8 seconds — lets the 5m candle close properly
+const CANDLE_DELAY_MS       = 8000;
 
 // ─── State files ──────────────────────────────────────────────────────────────
-const LOG_FILE           = "safety-check-log.json";
-const TRADES_FILE        = "trades.csv";
-const STATE_MOMENTUM     = "position-momentum.json";
-const STATE_PULLBACK     = "position-pullback.json";
-const STATE_CONTINUATION = "position-continuation.json";
-const STATE_TREND        = "position-trend.json";
+const LOG_FILE              = "safety-check-log.json";
+const TRADES_FILE           = "trades.csv";
+const STATE_MOMENTUM        = "position-momentum.json";
+const STATE_PULLBACK        = "position-pullback.json";
+const STATE_CONTINUATION    = "position-continuation.json";
+const STATE_TREND           = "position-trend.json";
+const COOLDOWN_MOMENTUM     = "cooldown-momentum.json";
+const COOLDOWN_PULLBACK     = "cooldown-pullback.json";
+const COOLDOWN_CONTINUATION = "cooldown-continuation.json";
+const COOLDOWN_TREND        = "cooldown-trend.json";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function httpsGet(url) {
@@ -244,6 +254,29 @@ async function clearPos(file) {
   await githubDelete(`state/${file}`);
 }
 
+async function setCooldown(file) {
+  const data = JSON.stringify({ exitTime: new Date().toISOString() });
+  const current = await githubGet(`state/${file}`);
+  await githubPut(`state/${file}`, data, current?.sha);
+}
+
+async function isInCooldown(file) {
+  if (!GITHUB_TOKEN || !GITHUB_REPO) return false;
+  const result = await githubGet(`state/${file}`);
+  if (!result) return false;
+  try {
+    const { exitTime } = JSON.parse(result.content);
+    const minutesSince = (Date.now() - new Date(exitTime).getTime()) / 60000;
+    if (minutesSince < COOLDOWN_MINUTES) {
+      console.log(`  ⏸️  Cooldown active — ${(COOLDOWN_MINUTES - minutesSince).toFixed(0)}min remaining`);
+      return true;
+    }
+    // Cooldown expired — delete it
+    await githubDelete(`state/${file}`);
+    return false;
+  } catch { return false; }
+}
+
 function todayTradeCount() {
   if (!fs.existsSync(TRADES_FILE)) return 0;
   const today = new Date().toISOString().slice(0, 10);
@@ -358,6 +391,7 @@ async function handlePosition(pos, stateFile, tag, tp, maxMinutes, solPrice, btc
 
   if (exitReason) {
     console.log(`  EXIT: ${exitReason}`);
+    const isMaxHold = exitReason.includes("Max hold");
     try {
       const order = await placeOrder("Sell", pos.quantity, tag);
       logTrade({ date, time, side: "Sell", quantity: pos.quantity, price: solPrice,
@@ -365,6 +399,12 @@ async function handlePosition(pos, stateFile, tag, tp, maxMinutes, solPrice, btc
       console.log("  Logged → trades.csv");
     } catch (e) { console.error("  ❌ Exit failed:", e.message); }
     await clearPos(stateFile);
+    // Set cooldown if exited due to max hold
+    if (isMaxHold) {
+      const cooldownFile = stateFile.replace("position-", "cooldown-");
+      await setCooldown(cooldownFile);
+      console.log(`  ⏸️  Cooldown set — won't re-enter ${tag} for ${COOLDOWN_MINUTES}min`);
+    }
     return true;
   }
   console.log("  ⏳ Holding");
@@ -440,10 +480,29 @@ async function main() {
     return;
   }
 
+  // BTC trend filter
+  const btcTrendBullish = btcChange1h >= BTC_TREND_MIN_1H;
+  if (!btcTrendBullish) {
+    console.log(`\n⚠️  BTC 1h negative (${btcChange1h.toFixed(2)}%) — only PULLBACK allowed`);
+  }
+
+  // Load cooldowns
+  const [coolM, coolP, coolC, coolT] = await Promise.all([
+    isInCooldown(COOLDOWN_MOMENTUM),
+    isInCooldown(COOLDOWN_PULLBACK),
+    isInCooldown(COOLDOWN_CONTINUATION),
+    isInCooldown(COOLDOWN_TREND),
+  ]);
+
   console.log("\n── Entry Check ───────────────────────────────────────────");
 
   // ── MOMENTUM MODE ──────────────────────────────────────────────────────────
   if (!hasM) {
+    if (coolM) {
+      console.log("\n  [MOMENTUM] In cooldown — skipping");
+    } else if (!btcTrendBullish) {
+      console.log("\n  [MOMENTUM] Skipped — BTC 1h negative");
+    } else {
     const lagRatio = btcChange15m > 0 ? solChange15m / btcChange15m : 999;
     const lagAdvantage = btcChange15m > 0 && lagRatio < MOMENTUM_LAG_RATIO; // bonus signal, not required
     const mConds = [
@@ -475,12 +534,16 @@ async function main() {
     } else {
       console.log(`  🚫 MOMENTUM blocked — ${mFailed.length} failed`);
     }
+    } // end btcTrendBullish else
   } else {
     console.log("\n  [MOMENTUM] Already in trade");
   }
 
   // ── PULLBACK MODE ──────────────────────────────────────────────────────────
   if (!hasP) {
+    if (coolP) {
+      console.log("\n  [PULLBACK] In cooldown — skipping");
+    } else {
     const solDroppedHarder = btcChange1h < 0 && solChange1h < btcChange1h * PULLBACK_SOL_MULT;
     const pConds = [
       { label: `BTC 1h pullback (${PULLBACK_BTC_MAX_1H}% to ${PULLBACK_BTC_MIN_1H}%)`, pass: btcChange1h <= PULLBACK_BTC_MIN_1H && btcChange1h >= PULLBACK_BTC_MAX_1H, actual: `${btcChange1h.toFixed(2)}%`, required: `between ${PULLBACK_BTC_MAX_1H}% and ${PULLBACK_BTC_MIN_1H}%` },
@@ -510,12 +573,18 @@ async function main() {
     } else {
       console.log(`  🚫 PULLBACK blocked — ${pFailed.length} failed`);
     }
+    } // end cooldown else
   } else {
     console.log("\n  [PULLBACK] Already in trade");
   }
 
   // ── CONTINUATION MODE ─────────────────────────────────────────────────────
   if (!hasC) {
+    if (coolC) {
+      console.log("\n  [CONTINUATION] In cooldown — skipping");
+    } else if (!btcTrendBullish) {
+      console.log("\n  [CONTINUATION] Skipped — BTC 1h negative");
+    } else {
     const recentHighs  = sol5m.slice(-BREAKOUT_LOOKBACK - 1, -1).map((c) => c.high);
     const highestHigh  = Math.max(...recentHighs);
     const isBreakout   = solPrice >= highestHigh * BREAKOUT_TOLERANCE;
@@ -549,12 +618,18 @@ async function main() {
     } else {
       console.log(`  🚫 CONTINUATION blocked — ${cFailed.length} failed`);
     }
+    } // end btcTrendBullish else
   } else {
     console.log("\n  [CONTINUATION] Already in trade");
   }
 
   // ── TREND MODE ────────────────────────────────────────────────────────────
   if (!hasT) {
+    if (coolT) {
+      console.log("\n  [TREND] In cooldown — skipping");
+    } else if (!btcTrendBullish) {
+      console.log("\n  [TREND] Skipped — BTC 1h negative");
+    } else {
     const aboveEMA8 = solEMA8 !== null && solPrice > solEMA8;
     const tConds = [
       { label: "SOL price above EMA8 (uptrend)",          pass: aboveEMA8,                                                          actual: `$${solPrice.toFixed(4)} vs EMA8 $${solEMA8?.toFixed(4) || "N/A"}`, required: "price > EMA8" },
@@ -584,6 +659,7 @@ async function main() {
     } else {
       console.log(`  🚫 TREND blocked — ${tFailed.length} failed`);
     }
+    } // end btcTrendBullish else
   } else {
     console.log("\n  [TREND] Already in trade");
   }
