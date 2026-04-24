@@ -58,7 +58,7 @@ const TREND_TP              =  0.8;  // TP +0.8%
 const MIN_ENTRY_DISTANCE    =  0.25;
 
 // Cooldown after any exit — don't re-enter any mode for 10min
-const COOLDOWN_MINUTES      = 10;
+const COOLDOWN_MINUTES      = 5;
 
 // BTC trend filter — if BTC 1h negative, only PULLBACK can enter
 const BTC_TREND_MIN_1H      =  0.0;  // BTC 1h must be >= 0% for trend-following modes
