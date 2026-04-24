@@ -2,3 +2,4 @@ Date,Time (UTC),Exchange,Symbol,Side,Quantity,Price,Total USD,Fee (est.),Net Amo
 ,,,,,,,,,,,"NOTE","Hey, if you're at this stage of the video, you must be enjoying it... perhaps you could hit subscribe now? :)"
 2026-04-24,00:20:37,BitGet,SOLUSDT,Buy,1.1583,86.3300,100.0000,0.0600,100.0600,PAPER-1776990039455,Paper,TREND
 2026-04-24,01:00:23,BitGet,SOLUSDT,Buy,1.1614,86.1000,100.0000,0.0600,100.0600,PAPER-1776992424780,Paper,MOMENTUM
+2026-04-24,01:25:37,BitGet,SOLUSDT,Sell,1.1583,85.9000,99.5019,0.0597,99.4422,PAPER-1776993937689,Paper,TREND
