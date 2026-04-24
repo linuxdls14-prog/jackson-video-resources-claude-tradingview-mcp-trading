@@ -10,7 +10,7 @@ const PORTFOLIO_VALUE_USD = parseFloat(process.env.PORTFOLIO_VALUE_USD || "100")
 const MAX_TRADES_PER_DAY  = parseInt(process.env.MAX_TRADES_PER_DAY || "20");
 const PAPER_TRADING       = process.env.PAPER_TRADING !== "false";
 const LEVERAGE            = 5;
-const TRADE_CAPITAL = PORTFOLIO_VALUE_USD;
+const TRADE_CAPITAL = 15;
 
 // ─── Strategy config ──────────────────────────────────────────────────────────
 // BTC is a FILTER only — blocks crashes, never requires pumps
