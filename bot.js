@@ -9,8 +9,8 @@ const BITGET_BASE_URL     = process.env.BITGET_BASE_URL || "https://api.bitget.c
 const PORTFOLIO_VALUE_USD = parseFloat(process.env.PORTFOLIO_VALUE_USD || "100");
 const MAX_TRADES_PER_DAY  = parseInt(process.env.MAX_TRADES_PER_DAY || "20");
 const PAPER_TRADING       = process.env.PAPER_TRADING !== "false";
-const LEVERAGE            = 3;
-const THIRD_CAPITAL       = PORTFOLIO_VALUE_USD / 3; // ~33 USDT per trade slot
+const LEVERAGE            = 5;
+const TRADE_CAPITAL = PORTFOLIO_VALUE_USD;
 
 // ─── Strategy config ──────────────────────────────────────────────────────────
 // BTC is a FILTER only — blocks crashes, never requires pumps
@@ -603,7 +603,7 @@ if (anyOpenPosition) {
       if (tooCloseToExisting(solPrice, openPositions)) {
         console.log(`  🚫 CONTINUATION blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
       } else {
-        const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
+        const qty = (TRADE_CAPITAL * LEVERAGE) / solPrice;
         console.log(`  ✅ CONTINUATION ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${BREAKOUT_TP}%`);
         try {
           const order = await placeOrder("Buy", qty, "CONTINUATION");
@@ -642,7 +642,7 @@ if (anyOpenPosition) {
       if (tooCloseToExisting(solPrice, openPositions)) {
         console.log(`  🚫 TREND blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
       } else {
-        const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
+        const qty = (TRADE_CAPITAL * LEVERAGE) / solPrice;
         console.log(`  ✅ TREND ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${TREND_TP}%`);
         try {
           const order = await placeOrder("Buy", qty, "TREND");
