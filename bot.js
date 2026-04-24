@@ -44,10 +44,10 @@ const BREAKOUT_TP           =  0.85; // TP +0.85%
 const BREAKOUT_TOLERANCE    =  0.994; // 0.6% tolerance — SOL breaks dirty
 
 // Max hold time per mode
-const MOMENTUM_MAX_MINUTES     = 45;
-const CONTINUATION_MAX_MINUTES = 60;
-const PULLBACK_MAX_MINUTES     = 45;
-const TREND_MAX_MINUTES        = 60;
+const MOMENTUM_MAX_MINUTES     = 150;
+const CONTINUATION_MAX_MINUTES = 150;
+const PULLBACK_MAX_MINUTES     = 150;
+const TREND_MAX_MINUTES        = 150;
 
 // Trend mode: price above EMA8, RSI healthy, BTC not crashing
 const TREND_RSI_MIN         = 55;    // RSI above 55 = trend has momentum
