@@ -525,7 +525,7 @@ if (anyOpenPosition) {
       if (tooCloseToExisting(solPrice, openPositions)) {
         console.log(`  🚫 MOMENTUM blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
       } else {
-        const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
+        const qty = (TRADE_CAPITAL * LEVERAGE) / solPrice;
         console.log(`  ✅ MOMENTUM ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${MOMENTUM_TP}%`);
         try {
           const order = await placeOrder("Buy", qty, "MOMENTUM");
@@ -561,7 +561,7 @@ if (anyOpenPosition) {
       if (tooCloseToExisting(solPrice, openPositions)) {
         console.log(`  🚫 PULLBACK blocked — price too close to existing position (< ${MIN_ENTRY_DISTANCE}%)`);
       } else {
-        const qty = (THIRD_CAPITAL * LEVERAGE) / solPrice;
+        const qty = (TRADE_CAPITAL * LEVERAGE) / solPrice;
         console.log(`  ✅ PULLBACK ENTRY @ $${solPrice.toFixed(4)} | ${qty.toFixed(4)} SOL | TP: +${PULLBACK_TP}%`);
         try {
           const order = await placeOrder("Buy", qty, "PULLBACK");
