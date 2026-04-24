@@ -32,7 +32,7 @@ const TRAIL_LOCK            =  0.25; // % — lock in at least this much profit
 // Pullback mode: SOL dropped harder than BTC = oversold bounce
 const PULLBACK_BTC_MIN_1H   = -0.1;  // BTC pulled back at least 0.1% in 1h (much more realistic)
 const PULLBACK_BTC_MAX_1H   = -2.5;  // Not a full crash
-const PULLBACK_SOL_MULT     =  1.6;  // SOL dropped 1.6x more than BTC — less restrictive
+const PULLBACK_SOL_MULT     =  1.3;  // SOL dropped 1.6x more than BTC — less restrictive
 const PULLBACK_SOL_RSI_MAX  = 50;    // 48.5 now enters
 const PULLBACK_TP           =  1.0;  // TP +1.0%
 
