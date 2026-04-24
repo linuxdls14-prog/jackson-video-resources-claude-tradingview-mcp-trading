@@ -7,7 +7,7 @@ const BITGET_SECRET_KEY   = process.env.BITGET_SECRET_KEY || "";
 const BITGET_PASSPHRASE   = process.env.BITGET_PASSPHRASE || "";
 const BITGET_BASE_URL     = process.env.BITGET_BASE_URL || "https://api.bitget.com";
 const PORTFOLIO_VALUE_USD = parseFloat(process.env.PORTFOLIO_VALUE_USD || "100");
-const MAX_TRADES_PER_DAY  = parseInt(process.env.MAX_TRADES_PER_DAY || "6");
+const MAX_TRADES_PER_DAY  = parseInt(process.env.MAX_TRADES_PER_DAY || "20");
 const PAPER_TRADING       = process.env.PAPER_TRADING !== "false";
 const LEVERAGE            = 3;
 const THIRD_CAPITAL       = PORTFOLIO_VALUE_USD / 3; // ~33 USDT per trade slot
@@ -44,10 +44,10 @@ const BREAKOUT_TP           =  0.85; // TP +0.85%
 const BREAKOUT_TOLERANCE    =  0.994; // 0.6% tolerance — SOL breaks dirty
 
 // Max hold time per mode
-const MOMENTUM_MAX_MINUTES     = 45;
-const CONTINUATION_MAX_MINUTES = 60;
-const PULLBACK_MAX_MINUTES     = 45;
-const TREND_MAX_MINUTES        = 60;
+const MOMENTUM_MAX_MINUTES     = 160;
+const CONTINUATION_MAX_MINUTES = 160;
+const PULLBACK_MAX_MINUTES     = 160;
+const TREND_MAX_MINUTES        = 160;
 
 // Trend mode: price above EMA8, RSI healthy, BTC not crashing
 const TREND_RSI_MIN         = 55;    // RSI above 55 = trend has momentum
