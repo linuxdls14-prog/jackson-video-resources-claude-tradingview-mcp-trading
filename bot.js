@@ -6,11 +6,11 @@ const BITGET_API_KEY      = process.env.BITGET_API_KEY || "";
 const BITGET_SECRET_KEY   = process.env.BITGET_SECRET_KEY || "";
 const BITGET_PASSPHRASE   = process.env.BITGET_PASSPHRASE || "";
 const BITGET_BASE_URL     = process.env.BITGET_BASE_URL || "https://api.bitget.com";
-const PORTFOLIO_VALUE_USD = parseFloat(process.env.PORTFOLIO_VALUE_USD || "15");
+const PORTFOLIO_VALUE_USD = parseFloat(process.env.PORTFOLIO_VALUE_USD || "100");
 const MAX_TRADES_PER_DAY  = parseInt(process.env.MAX_TRADES_PER_DAY || "20");
 const PAPER_TRADING       = process.env.PAPER_TRADING !== "false";
 const LEVERAGE            = 5;
-const TRADE_CAPITAL = 15;
+const TRADE_CAPITAL       = 15; // Fixed $15 per trade
 
 // ─── Strategy config ──────────────────────────────────────────────────────────
 // BTC is a FILTER only — blocks crashes, never requires pumps
@@ -30,9 +30,9 @@ const TRAIL_START           =  0.6;  // % — start trailing when PnL hits +0.6%
 const TRAIL_LOCK            =  0.25; // % — lock in at least this much profit
 
 // Pullback mode: SOL dropped harder than BTC = oversold bounce
-const PULLBACK_BTC_MIN_1H   = -0.1;  // BTC pulled back at least 0.1% in 1h (much more realistic)
+const PULLBACK_BTC_MIN_1H   = -0.05; // BTC pulled back at least 0.05% in 1h
 const PULLBACK_BTC_MAX_1H   = -2.5;  // Not a full crash
-const PULLBACK_SOL_MULT     =  1.3;  // SOL dropped 1.6x more than BTC — less restrictive
+const PULLBACK_SOL_MULT     =  1.6;  // SOL dropped 1.6x more than BTC — less restrictive
 const PULLBACK_SOL_RSI_MAX  = 50;    // 48.5 now enters
 const PULLBACK_TP           =  1.0;  // TP +1.0%
 
@@ -44,10 +44,10 @@ const BREAKOUT_TP           =  0.85; // TP +0.85%
 const BREAKOUT_TOLERANCE    =  0.994; // 0.6% tolerance — SOL breaks dirty
 
 // Max hold time per mode
-const MOMENTUM_MAX_MINUTES     = 160;
-const CONTINUATION_MAX_MINUTES = 160;
-const PULLBACK_MAX_MINUTES     = 160;
-const TREND_MAX_MINUTES        = 160;
+const MOMENTUM_MAX_MINUTES     = 45;
+const CONTINUATION_MAX_MINUTES = 60;
+const PULLBACK_MAX_MINUTES     = 45;
+const TREND_MAX_MINUTES        = 60;
 
 // Trend mode: price above EMA8, RSI healthy, BTC not crashing
 const TREND_RSI_MIN         = 55;    // RSI above 55 = trend has momentum
@@ -58,7 +58,7 @@ const TREND_TP              =  0.8;  // TP +0.8%
 const MIN_ENTRY_DISTANCE    =  0.25;
 
 // Cooldown after any exit — don't re-enter any mode for 10min
-const COOLDOWN_MINUTES      = 5;
+const COOLDOWN_MINUTES      = 10;
 
 // BTC trend filter — if BTC 1h negative, only PULLBACK can enter
 const BTC_TREND_MIN_1H      =  0.0;  // BTC 1h must be >= 0% for trend-following modes
@@ -465,13 +465,14 @@ async function main() {
     loadPos(STATE_CONTINUATION).then(Boolean),
     loadPos(STATE_TREND).then(Boolean),
   ]);
-// ── SINGLE TRADE MODE ───────────────────────────────────
-const anyOpenPosition = hasM || hasP || hasC || hasT;
 
-if (anyOpenPosition) {
-  console.log("\n⛔ Trade already open — skipping new entries");
-  return;
-}
+  // ── One position at a time ─────────────────────────────────────────────────
+  const anyPositionOpen = hasM || hasP || hasC || hasT;
+  if (anyPositionOpen) {
+    console.log("\n🔒 Trade already open — skipping new entries");
+    return;
+  }
+
   // ── Crash guard — only thing BTC is used for ──────────────────────────────
   if (btcChange5m <= CRASH_BTC_5M || btcChange15m <= CRASH_BTC_15M || btcChange1h <= CRASH_BTC_1H) {
     console.log(`\n🚨 CRASH DETECTED — no new entries`);
