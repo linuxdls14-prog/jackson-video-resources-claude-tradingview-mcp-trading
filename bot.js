@@ -465,7 +465,13 @@ async function main() {
     loadPos(STATE_CONTINUATION).then(Boolean),
     loadPos(STATE_TREND).then(Boolean),
   ]);
+// ── SINGLE TRADE MODE ───────────────────────────────────
+const anyOpenPosition = hasM || hasP || hasC || hasT;
 
+if (anyOpenPosition) {
+  console.log("\n⛔ Trade already open — skipping new entries");
+  return;
+}
   // ── Crash guard — only thing BTC is used for ──────────────────────────────
   if (btcChange5m <= CRASH_BTC_5M || btcChange15m <= CRASH_BTC_15M || btcChange1h <= CRASH_BTC_1H) {
     console.log(`\n🚨 CRASH DETECTED — no new entries`);
