@@ -6,11 +6,11 @@ const BITGET_API_KEY      = process.env.BITGET_API_KEY || "";
 const BITGET_SECRET_KEY   = process.env.BITGET_SECRET_KEY || "";
 const BITGET_PASSPHRASE   = process.env.BITGET_PASSPHRASE || "";
 const BITGET_BASE_URL     = process.env.BITGET_BASE_URL || "https://api.bitget.com";
-const PORTFOLIO_VALUE_USD = parseFloat(process.env.PORTFOLIO_VALUE_USD || "100");
+const PORTFOLIO_VALUE_USD = parseFloat(process.env.PORTFOLIO_VALUE_USD || "10");
 const MAX_TRADES_PER_DAY  = parseInt(process.env.MAX_TRADES_PER_DAY || "20");
 const PAPER_TRADING       = process.env.PAPER_TRADING !== "false";
 const LEVERAGE            = 5;
-const TRADE_CAPITAL       = 15; // Fixed $15 per trade
+const TRADE_CAPITAL       = 10; // Fixed $15 per trade
 
 // ─── Strategy config ──────────────────────────────────────────────────────────
 // BTC is a FILTER only — blocks crashes, never requires pumps
