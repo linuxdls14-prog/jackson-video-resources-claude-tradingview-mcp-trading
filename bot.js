@@ -317,48 +317,84 @@ function tooCloseToExisting(currentPrice, positions) {
 }
 
 // ─── BitGet order ─────────────────────────────────────────────────────────────
+/ ─── BitGet order ─────────────────────────────────────────────────────────────
 async function placeOrder(side, quantity, tag) {
   if (PAPER_TRADING) {
     console.log(`  📄 PAPER [${tag}] — would ${side} ${quantity.toFixed(4)} SOLUSDT`);
     return { orderId: "PAPER-" + Date.now() };
   }
-  const crypto    = await import("crypto");
+
+  const crypto = await import("crypto");
   const timestamp = Date.now().toString();
-  const body = JSON.stringify({
-  symbol: "SOLUSDT",
-  productType: "usdt-futures",
-  marginMode: "isolated",
-  marginCoin: "USDT",
-  size: quantity.toString(),
-  side: side === "Buy" ? "buy" : "sell",
-  orderType: "market",
-  force: "gtc"
-});
+
+  const bodyObj = {
+    symbol: "SOLUSDT",
+    productType: "usdt-futures",
+    marginMode: "isolated",
+    marginCoin: "USDT",
+    size: quantity.toString(),
+    side: side === "Buy" ? "buy" : "sell",
+    orderType: "market",
+    force: "gtc",
+    reduceOnly: "NO"
+  };
+
+  const body = JSON.stringify(bodyObj);
+
+  console.log("🚀 Sending REAL order to BitGet:");
+  console.log(body);
+
   const sign = crypto.default
     .createHmac("sha256", BITGET_SECRET_KEY)
     .update(timestamp + "POST" + "/api/v2/mix/order/place-order" + body)
     .digest("base64");
+
   return new Promise((resolve, reject) => {
     const u = new URL(BITGET_BASE_URL + "/api/v2/mix/order/place-order");
+
     const req = https.request({
-      hostname: u.hostname, path: u.pathname, method: "POST",
+      hostname: u.hostname,
+      path: u.pathname,
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "ACCESS-KEY": BITGET_API_KEY, "ACCESS-SIGN": sign,
-        "ACCESS-TIMESTAMP": timestamp, "ACCESS-PASSPHRASE": BITGET_PASSPHRASE,
+        "ACCESS-KEY": BITGET_API_KEY,
+        "ACCESS-SIGN": sign,
+        "ACCESS-TIMESTAMP": timestamp,
+        "ACCESS-PASSPHRASE": BITGET_PASSPHRASE,
       },
     }, (res) => {
+
       let d = "";
+
       res.on("data", (c) => (d += c));
+
       res.on("end", () => {
         try {
           const parsed = JSON.parse(d);
-          console.log(`  📡 BitGet response: ${JSON.stringify(parsed)}`);
+
+          console.log("📡 BitGet response:");
+          console.log(parsed);
+
+          if (parsed.code !== "00000") {
+            console.error("❌ BitGet order rejected:", parsed);
+          }
+
           resolve(parsed);
-        } catch (e) { reject(e); }
+
+        } catch (e) {
+          console.error("❌ Failed to parse BitGet response:", d);
+          reject(e);
+        }
       });
+
     });
-    req.on("error", reject);
+
+    req.on("error", (err) => {
+      console.error("❌ BitGet request error:", err);
+      reject(err);
+    });
+
     req.write(body);
     req.end();
   });
