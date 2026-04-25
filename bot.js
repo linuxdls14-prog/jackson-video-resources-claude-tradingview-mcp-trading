@@ -324,13 +324,16 @@ async function placeOrder(side, quantity, tag) {
   }
   const crypto    = await import("crypto");
   const timestamp = Date.now().toString();
-  const body      = JSON.stringify({
-    symbol: "SOLUSDT", productType: "usdt-futures",
-    marginMode: "isolated", marginCoin: "USDT",
-    size: quantity.toString(),
-    side: side === "Buy" ? "buy" : "sell",
-    orderType: "market", leverage: LEVERAGE.toString(),
-  });
+  const body = JSON.stringify({
+  symbol: "SOLUSDT",
+  productType: "usdt-futures",
+  marginMode: "isolated",
+  marginCoin: "USDT",
+  size: quantity.toString(),
+  side: side === "Buy" ? "buy" : "sell",
+  orderType: "market",
+  force: "gtc"
+});
   const sign = crypto.default
     .createHmac("sha256", BITGET_SECRET_KEY)
     .update(timestamp + "POST" + "/api/v2/mix/order/place-order" + body)
