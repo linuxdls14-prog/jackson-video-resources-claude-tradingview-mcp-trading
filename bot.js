@@ -325,7 +325,7 @@ async function placeOrder(side, quantity, tag) {
   const crypto    = await import("crypto");
   const timestamp = Date.now().toString();
   const body      = JSON.stringify({
-    symbol: "SOLUSDT", productType: "USDT-FUTURES",
+    symbol: "SOLUSDT", productType: "usdt-futures",
     marginMode: "isolated", marginCoin: "USDT",
     size: quantity.toString(),
     side: side === "Buy" ? "buy" : "sell",
