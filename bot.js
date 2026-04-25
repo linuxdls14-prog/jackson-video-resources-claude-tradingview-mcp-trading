@@ -347,7 +347,13 @@ async function placeOrder(side, quantity, tag) {
     }, (res) => {
       let d = "";
       res.on("data", (c) => (d += c));
-      res.on("end", () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(d);
+          console.log(`  📡 BitGet response: ${JSON.stringify(parsed)}`);
+          resolve(parsed);
+        } catch (e) { reject(e); }
+      });
     });
     req.on("error", reject);
     req.write(body);
