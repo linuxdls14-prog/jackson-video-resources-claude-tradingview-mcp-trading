@@ -8,7 +8,7 @@ const BITGET_PASSPHRASE   = process.env.BITGET_PASSPHRASE || "";
 const BITGET_BASE_URL     = process.env.BITGET_BASE_URL || "https://api.bitget.com";
 const PORTFOLIO_VALUE_USD = parseFloat(process.env.PORTFOLIO_VALUE_USD || "10");
 const MAX_TRADES_PER_DAY  = parseInt(process.env.MAX_TRADES_PER_DAY || "20");
-const PAPER_TRADING       = process.env.PAPER_TRADING !== "false";
+const PAPER_TRADING       = process.env.PAPER_TRADING !== "true";
 const LEVERAGE            = 5;
 const TRADE_CAPITAL       = 8; // Fixed $15 per trade
 
